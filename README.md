@@ -1,8 +1,13 @@
-# CivicResolve AI
+# CivicResolve AI — Version 2
 
-CivicResolve AI is a complete, responsive public grievance redressal portal. Citizens can submit and track complaints, while administrators can prioritise, assign, update and analyse civic issues.
+CivicResolve AI is an intelligent public grievance redressal portal. Citizens can report and track civic issues, while administrators can classify, prioritise, assign, update and analyse complaints from a single dashboard.
 
-## Main features
+## Branches
+
+- `main` — protected stable MVP
+- `enhancement-v2` — active Version 2 development
+
+## Current features
 
 - Citizen complaint submission
 - Automatic category detection
@@ -16,28 +21,59 @@ CivicResolve AI is a complete, responsive public grievance redressal portal. Cit
 - Citizen rating and feedback
 - Dashboard and analytics charts
 - Browser LocalStorage persistence
-- Mobile-responsive design
+- Responsive mobile and desktop design
 
-## Technology
+## Version 2 interface enhancements
 
-- HTML5
-- CSS3
-- Vanilla JavaScript
-- Browser LocalStorage
+- Professional government-service visual design
+- Blue civic administration design system
+- Improved sidebar, top bar, cards, tables, forms and modals
+- Light and dark themes with saved preference
+- Global complaint search using `Ctrl + K`
+- Smooth page and dashboard-card transitions
+- Improved responsive layouts for desktop, tablet and mobile
+- Enhanced contrast, focus states and keyboard navigation
+- Non-destructive enhancement layer that preserves the stable complaint logic
+- Firebase email/password authentication and Google sign-in
+- Password reset and citizen self-registration
+- Firestore-backed citizen, department-officer and administrator profiles
+- Protected navigation, department-scoped officer access and administrator-only actions
+- Connected Firebase project with production-only authentication
+- Published least-privilege Firestore rules for citizen, officer and administrator roles
 
-The application has no package dependencies, so it can be opened and demonstrated immediately.
+## Project structure
 
-## Run the project
+```text
+civicresolve-ai/
+├── assets/
+│   ├── css/
+│   │   ├── auth.css
+│   │   ├── styles.css
+│   │   └── v2.css
+│   └── js/
+│       ├── app.js
+│       ├── auth.js
+│       ├── firebase-config.js
+│       └── v2-ui.js
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── ENHANCEMENT_ROADMAP.md
+│   └── FIREBASE_SETUP.md
+├── firebase.json
+├── firestore.rules
+├── .gitignore
+├── index.html
+├── README.md
+└── vercel.json
+```
 
-### Easiest method
+## Run locally
 
-1. Extract the ZIP file.
-2. Open the project folder in VS Code.
-3. Install the **Live Server** extension.
-4. Right-click `index.html`.
-5. Select **Open with Live Server**.
+```bash
+python -m http.server 5500
+```
 
-You can also open `index.html` directly in a browser.
+Open `http://localhost:5500` in a browser.
 
 ## Demo grievance ID
 
@@ -45,36 +81,14 @@ You can also open `index.html` directly in a browser.
 GRV-2026-001
 ```
 
-## Deploy to Vercel
+## Deployment
 
-1. Push this folder to a GitHub repository.
-2. Import the repository into Vercel.
-3. Choose **Other** as the framework preset if necessary.
-4. Leave the build command empty.
-5. Set the output directory to `.` or leave it empty for a static deployment.
-6. Deploy.
+The project is a static HTML, CSS and JavaScript application and can be deployed directly to Vercel. No build command is required.
 
-## Project flow
+## Firebase environment
 
-```text
-Citizen submits complaint
-        ↓
-Smart classification and priority detection
-        ↓
-Unique grievance ID generated
-        ↓
-Admin manages complaint
-        ↓
-Citizen tracks updated status
-        ↓
-Complaint resolved and rated
-```
+The `enhancement-v2` branch is connected to Firebase project `civicresolve-ai-3d54c`. Email/Password and Google sign-in are enabled, and the default Firestore database uses the Mumbai (`asia-south1`) region. Follow `docs/FIREBASE_SETUP.md` to review the configuration or provision department officers and administrators.
 
-## Future enhancements
+## Next phase
 
-- Firebase authentication and Firestore
-- Image uploads
-- SMS and email alerts
-- Map-based complaint location
-- Gemini-powered text classification and summarisation
-- Department officer accounts
+The next major enhancement is migrating complaint data from LocalStorage to Cloud Firestore with real-time updates.

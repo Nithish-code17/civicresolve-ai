@@ -50,7 +50,26 @@ let complaints = loadComplaints();
 let activePage = "dashboard";
 let lastSubmitted = null;
 let trackingResult = null;
+let trackingError = "";
 let selectedComplaintId = null;
+
+function authProfile() { return window.CivicAuth?.getProfile() || null; }
+function currentRole() { return window.CivicAuth?.getRole() || "citizen"; }
+function isCitizen() { return currentRole() === window.CivicAuth?.ROLES.CITIZEN; }
+function isOfficer() { return currentRole() === window.CivicAuth?.ROLES.OFFICER; }
+function isAdministrator() { return currentRole() === window.CivicAuth?.ROLES.ADMIN; }
+
+function visibleComplaints() {
+  if (isAdministrator()) return complaints;
+  if (isOfficer()) return complaints.filter(item => window.CivicAuth.canManageComplaint(item));
+  return complaints.filter(item => window.CivicAuth.ownsComplaint(item));
+}
+
+function canViewComplaint(item) {
+  if (isAdministrator()) return true;
+  if (isOfficer()) return window.CivicAuth.canManageComplaint(item);
+  return window.CivicAuth.ownsComplaint(item);
+}
 
 function loadComplaints() {
   try {
@@ -104,18 +123,18 @@ function statusSlug(status) { return status.toLowerCase().replaceAll(" ", "-"); 
 function priorityBadge(priority) { return `<span class="badge priority-${priority.toLowerCase()}">${escapeHtml(priority)}</span>`; }
 function statusBadge(status) { return `<span class="badge status-${statusSlug(status)}">${escapeHtml(status)}</span>`; }
 
-function getStats() {
-  const total = complaints.length;
-  const resolved = complaints.filter(item => item.status === "Resolved").length;
-  const pending = complaints.filter(item => ["Submitted", "Under Review"].includes(item.status)).length;
-  const inProgress = complaints.filter(item => ["Assigned", "In Progress"].includes(item.status)).length;
-  const highPriority = complaints.filter(item => item.priority === "High").length;
+function getStats(items = complaints) {
+  const total = items.length;
+  const resolved = items.filter(item => item.status === "Resolved").length;
+  const pending = items.filter(item => ["Submitted", "Under Review"].includes(item.status)).length;
+  const inProgress = items.filter(item => ["Assigned", "In Progress"].includes(item.status)).length;
+  const highPriority = items.filter(item => item.priority === "High").length;
   return { total, resolved, pending, inProgress, highPriority, resolutionRate: total ? Math.round(resolved / total * 100) : 0 };
 }
 
-function countBy(key) {
+function countBy(key, items = complaints) {
   const map = {};
-  complaints.forEach(item => { map[item[key] || "Unknown"] = (map[item[key] || "Unknown"] || 0) + 1; });
+  items.forEach(item => { map[item[key] || "Unknown"] = (map[item[key] || "Unknown"] || 0) + 1; });
   return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 }
 
@@ -128,16 +147,27 @@ function showToast(message) {
 }
 
 function pageTitle(page) {
+  const profile = authProfile();
   return {
-    dashboard: "Civic Operations Dashboard",
+    dashboard: isCitizen() ? "My Civic Dashboard" : isOfficer() ? `${profile?.department || "Department"} Dashboard` : "Civic Operations Dashboard",
     submit: "Submit a Complaint",
     track: "Track a Complaint",
-    admin: "Admin Complaint Management",
+    admin: isOfficer() ? "Department Complaint Management" : "Admin Complaint Management",
     analytics: "Analytics & Insights"
   }[page];
 }
 
 function appShell() {
+  const profile = authProfile();
+  const initials = (profile?.displayName || "User").split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase();
+  const roleLabel = window.CivicAuth.getRoleLabel();
+  const navItems = [
+    ["dashboard", "▦", "Dashboard"],
+    ["submit", "+", "Submit Complaint"],
+    ["track", "⌕", "Track Complaint"],
+    ["admin", "☷", isOfficer() ? "Department Work" : "Admin Management"],
+    ["analytics", "▥", "Analytics"]
+  ].filter(([page]) => window.CivicAuth.canAccess(page));
   return `
     <div class="app-shell">
       <button id="sidebarBackdrop" class="sidebar-backdrop hidden" aria-label="Close menu"></button>
@@ -148,19 +178,15 @@ function appShell() {
           <button id="sidebarClose" class="icon-button sidebar-close" aria-label="Close menu">✕</button>
         </div>
         <nav class="sidebar-nav">
-          ${navLink("dashboard", "▦", "Dashboard")}
-          ${navLink("submit", "＋", "Submit Complaint")}
-          ${navLink("track", "⌕", "Track Complaint")}
-          ${navLink("admin", "☷", "Admin Management")}
-          ${navLink("analytics", "▥", "Analytics")}
+          ${navItems.map(item => navLink(...item)).join("")}
         </nav>
-        <div class="sidebar-card"><div style="font-size:22px">◉</div><strong>Citizen-first service</strong><p>Classify, prioritise, assign and resolve public issues transparently.</p></div>
+        <div class="sidebar-card sidebar-role-card"><div style="font-size:22px">◉</div><strong>${escapeHtml(roleLabel)} access</strong><p>${isOfficer() ? `Assigned to ${escapeHtml(profile?.department || "your department")}.` : isAdministrator() ? "Full municipal oversight and complaint administration." : "Submit grievances and follow your personal cases securely."}</p></div>
       </aside>
       <main class="main-area">
         <header class="topbar">
           <button id="menuButton" class="icon-button menu-button" aria-label="Open menu">☰</button>
           <div><p class="eyebrow">Smart civic administration</p><h1>${pageTitle(activePage)}</h1></div>
-          <div class="admin-chip"><div class="admin-avatar">✓</div><div><strong>Demo Admin</strong><span>Municipal Portal</span></div></div>
+          <div class="admin-chip"><div class="admin-avatar">${escapeHtml(initials)}</div><div><strong>${escapeHtml(profile?.displayName || "CivicResolve User")}</strong><span class="role-badge">${escapeHtml(roleLabel)}</span></div><button id="signOutButton" class="v2-icon-button signout-button" type="button" aria-label="Sign out" title="Sign out">↪</button></div>
         </header>
         <div id="pageContent" class="content-wrap"></div>
       </main>
@@ -173,6 +199,11 @@ function navLink(id, symbol, label) {
 }
 
 function renderApp() {
+  if (!window.CivicAuth?.isAuthenticated()) {
+    window.CivicAuth?.renderAuthScreen();
+    return;
+  }
+  if (!window.CivicAuth.canAccess(activePage)) activePage = "dashboard";
   document.getElementById("app").innerHTML = appShell();
   document.getElementById("pageContent").innerHTML = renderPage();
   attachShellEvents();
@@ -195,12 +226,18 @@ function attachShellEvents() {
   const close = () => { sidebar.classList.remove("sidebar-open"); backdrop.classList.add("hidden"); };
   document.getElementById("sidebarClose").addEventListener("click", close);
   backdrop.addEventListener("click", close);
+  document.getElementById("signOutButton")?.addEventListener("click", () => window.CivicAuth.signOut());
 }
 
 function navigate(page) {
+  if (!window.CivicAuth.canAccess(page)) {
+    showToast("Your role does not have access to that page.");
+    return;
+  }
   activePage = page;
   lastSubmitted = null;
   selectedComplaintId = null;
+  trackingError = "";
   renderApp();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -213,29 +250,46 @@ function panel(title, subtitle, content, action = "") {
   return `<section class="panel"><div class="panel-header"><div><h3>${title}</h3><p>${subtitle}</p></div>${action}</div>${content}</section>`;
 }
 
+function dashboardHero() {
+  const profile = authProfile();
+  if (isCitizen()) return `<section class="hero-panel">
+    <div>
+      <span class="hero-kicker">✦ Citizen grievance services</span>
+      <h2>Welcome, ${escapeHtml(profile?.displayName?.split(" ")[0] || "Citizen")}.</h2>
+      <p>Report a civic issue, receive a grievance ID and follow every official update from one secure account.</p>
+      <div class="hero-actions"><button class="primary-button" data-go="submit">+ Submit Complaint</button><button class="secondary-button" data-go="track">⌕ Track My Complaint</button></div>
+    </div>
+    <div class="hero-visual"><div class="pulse-ring">✓</div><div class="floating-card fc-one">✓ Personal case access</div><div class="floating-card fc-two">◷ Live status tracking</div></div>
+  </section>`;
+
+  return `<section class="hero-panel">
+    <div>
+      <span class="hero-kicker">✦ ${isOfficer() ? "Department operations" : "Municipal oversight"}</span>
+      <h2>${isOfficer() ? `Manage ${escapeHtml(profile?.department || "department")} grievances.` : "Resolve public issues faster and more transparently."}</h2>
+      <p>${isOfficer() ? "Review assigned cases, update progress and complete resolution work within the expected service window." : "Monitor every department, manage routing and priority, and maintain accountable grievance resolution."}</p>
+      <div class="hero-actions"><button class="primary-button" data-go="admin">☷ Open Complaint Management</button><button class="secondary-button" data-go="analytics">▥ View Analytics</button></div>
+    </div>
+    <div class="hero-visual"><div class="pulse-ring">✓</div><div class="floating-card fc-one">✓ Role-protected access</div><div class="floating-card fc-two">⚠ Smart priority</div></div>
+  </section>`;
+}
+
 function renderDashboard() {
-  const stats = getStats();
+  const scopedComplaints = visibleComplaints();
+  const stats = getStats(scopedComplaints);
+  const scopeLabel = isCitizen() ? "Your registered issues" : isOfficer() ? `Assigned to ${authProfile()?.department || "your department"}` : "All registered issues";
   return `<div class="page-stack">
-    <section class="hero-panel">
-      <div>
-        <span class="hero-kicker">✦ AI-assisted civic service</span>
-        <h2>Resolve public issues faster and more transparently.</h2>
-        <p>Citizens can report issues, receive a grievance ID and track progress. Administrators can classify, prioritise and manage every complaint from one dashboard.</p>
-        <div class="hero-actions"><button class="primary-button" data-go="submit">＋ Submit Complaint</button><button class="secondary-button" data-go="track">⌕ Track Complaint</button></div>
-      </div>
-      <div class="hero-visual"><div class="pulse-ring">✓</div><div class="floating-card fc-one">✓ Transparent tracking</div><div class="floating-card fc-two">⚠ Smart priority</div></div>
-    </section>
+    ${dashboardHero()}
     <section class="stats-grid">
-      ${statCard("Total Complaints", stats.total, "☷", "All registered issues")}
+      ${statCard("Total Complaints", stats.total, "☷", scopeLabel)}
       ${statCard("Pending", stats.pending, "◷", "Submitted or under review", "warning")}
       ${statCard("In Progress", stats.inProgress, "◉", "Assigned and being handled", "info")}
       ${statCard("Resolved", stats.resolved, "✓", `${stats.resolutionRate}% resolution rate`, "success")}
     </section>
     <section class="two-column-grid">
-      ${panel("Complaints by category", "Distribution across public service departments", renderDonut(countBy("category")))}
-      ${panel("Complaint status", "Current operational workload", renderBars(countBy("status"), "#1f6f5f"))}
+      ${panel("Complaints by category", "Distribution within your permitted complaint scope", renderDonut(countBy("category", scopedComplaints)))}
+      ${panel("Complaint status", "Current workload in your permitted scope", renderBars(countBy("status", scopedComplaints), "#1f6f5f"))}
     </section>
-    ${panel("Recent complaints", "Latest issues reported by citizens", complaintTable(complaints.slice(0, 5), true), '<button class="text-button" data-go="admin">Manage all ›</button>')}
+    ${panel("Recent complaints", isCitizen() ? "Your latest registered grievances" : "Latest complaints available to your role", complaintTable(scopedComplaints.slice(0, 5), true), `<button class="text-button" data-go="${isCitizen() ? "track" : "admin"}">${isCitizen() ? "Track grievance" : "Manage all"} ›</button>`)}
   </div>`;
 }
 
@@ -265,24 +319,25 @@ function complaintTable(items, compact = false) {
     <td><strong>${escapeHtml(item.id)}</strong><span class="table-subtext">${formatDate(item.createdAt)}</span></td>
     <td><strong>${escapeHtml(item.title)}</strong><span class="table-subtext">${escapeHtml(item.location)}</span></td>
     <td>${escapeHtml(item.category)}</td><td>${priorityBadge(item.priority)}</td><td>${statusBadge(item.status)}</td>
-    ${compact ? "" : `<td><div class="table-actions"><button class="table-button" data-manage="${item.id}">Manage</button><button class="delete-button" data-delete="${item.id}" title="Delete complaint">×</button></div></td>`}
+    ${compact ? "" : `<td><div class="table-actions">${window.CivicAuth.canManageComplaint(item) ? `<button class="table-button" data-manage="${item.id}">Manage</button>` : ""}${window.CivicAuth.canDeleteComplaint() ? `<button class="delete-button" data-delete="${item.id}" title="Delete complaint">×</button>` : ""}</div></td>`}
   </tr>`).join("")}</tbody></table></div>`;
 }
 
 function renderSubmitPage() {
   if (lastSubmitted) return renderSubmissionSuccess(lastSubmitted);
+  const profile = authProfile();
   return `<div class="form-layout">
     <form id="complaintForm" class="form-card">
-      <div class="section-heading"><div class="section-icon">＋</div><div><h2>Report a public issue</h2><p>Provide clear details so the correct department can respond quickly.</p></div></div>
+      <div class="section-heading"><div class="section-icon">+</div><div><h2>Report a public issue</h2><p>Provide clear details so the correct department can respond quickly.</p></div></div>
       <div class="form-grid two">
-        ${field("Full name", "citizenName", "Enter citizen name", true)}
-        ${field("Phone number", "phone", "10-digit mobile number", true, "tel", 'pattern="[0-9]{10}"')}
+        ${field("Full name", "citizenName", "Enter citizen name", true, "text", `value="${escapeHtml(profile?.displayName || "")}" readonly`)}
+        ${field("Phone number", "phone", "10-digit mobile number", true, "tel", `pattern="[0-9]{10}" value="${escapeHtml(profile?.phone || "")}"`)}
       </div>
-      ${field("Email address", "email", "name@example.com", true, "email")}
+      ${field("Email address", "email", "name@example.com", true, "email", `value="${escapeHtml(profile?.email || "")}" readonly`)}
       ${field("Complaint title", "title", "Example: Streetlight not working", true)}
       <label class="field-label"><span>Detailed description</span><textarea id="description" name="description" placeholder="Describe the problem, how long it has existed and whether it creates danger." required minlength="15" rows="6"></textarea></label>
       ${field("Location / landmark", "location", "Example: Near Gandhipuram Bus Stand", true)}
-      <div class="form-note">✓ Your contact information is used only for complaint tracking in this demo.</div>
+      <div class="form-note">✓ This complaint will be securely linked to your signed-in citizen account.</div>
       <button class="primary-button full-width" type="submit">✦ Analyse and Submit Complaint</button>
     </form>
     <aside id="analysisCard" class="analysis-card">${renderEmptyAnalysis()}</aside>
@@ -330,26 +385,26 @@ function resultRow(label, value) { return `<div class="result-row"><span>${label
 
 function renderTrackPage() {
   return `<div class="page-stack">
-    <section class="track-hero"><div class="track-icon">⌕</div><p class="eyebrow">Transparent progress tracking</p><h2>Track your grievance</h2><p>Enter the complaint ID received after submission.</p>
+    <section class="track-hero"><div class="track-icon">⌕</div><p class="eyebrow">Protected progress tracking</p><h2>Track ${isCitizen() ? "your" : "an authorised"} grievance</h2><p>Enter a complaint ID available to your signed-in role.</p>
       <form id="trackForm" class="track-search"><input id="trackId" placeholder="Example: GRV-2026-001" required><button class="primary-button" type="submit">⌕ Track</button></form>
-      <button id="demoTrack" class="sample-link">Try demo ID: GRV-2026-001</button>
+      ${window.CivicAuth.isDemoMode() ? '<button id="demoTrack" class="sample-link">Try permitted demo ID: GRV-2026-001</button>' : ""}
     </section>
     <div id="trackResult">${trackingResult ? renderTrackingResult(trackingResult) : ""}</div>
   </div>`;
 }
 
 function renderTrackingResult(item) {
-  if (!item) return `<div class="alert error">⚠ <span>No complaint was found. Check the grievance ID and try again.</span></div>`;
+  if (!item) return `<div class="alert error">⚠ <span>${escapeHtml(trackingError || "No complaint was found. Check the grievance ID and try again.")}</span></div>`;
   const currentIndex = STATUS_FLOW.indexOf(item.status);
   return `<section class="tracking-result">
     <div class="tracking-header"><div><p class="eyebrow">${escapeHtml(item.id)}</p><h2>${escapeHtml(item.title)}</h2>${statusBadge(item.status)}</div>${priorityBadge(item.priority + " priority").replace(`priority-${item.priority.toLowerCase()} priority`, `priority-${item.priority.toLowerCase()}`)}</div>
     <div class="details-grid">
-      ${detailCard("👤", "Citizen", item.citizenName)}${detailCard("⌖", "Location", item.location)}${detailCard("▤", "Department", item.department)}${detailCard("◷", "Expected resolution", formatDate(item.expectedResolutionDate))}
+      ${detailCard("◉", "Citizen", item.citizenName)}${detailCard("⌖", "Location", item.location)}${detailCard("▤", "Department", item.department)}${detailCard("◷", "Expected resolution", formatDate(item.expectedResolutionDate))}
     </div>
     <div class="description-block"><strong>Complaint description</strong><p>${escapeHtml(item.description)}</p></div>
     <div class="timeline-card"><h3>Status timeline</h3><div class="timeline">${STATUS_FLOW.map((status, index) => `<div class="timeline-step ${index <= currentIndex ? "complete" : ""} ${index === currentIndex ? "current" : ""}"><div class="timeline-marker">${index <= currentIndex ? "✓" : "○"}</div><span>${status}</span></div>`).join("")}</div></div>
     ${item.resolutionNote ? `<div class="resolution-note">✓<div><strong>Department update</strong><p>${escapeHtml(item.resolutionNote)}</p></div></div>` : ""}
-    ${item.status === "Resolved" ? renderFeedback(item) : ""}
+    ${item.status === "Resolved" && isCitizen() && window.CivicAuth.ownsComplaint(item) ? renderFeedback(item) : ""}
   </section>`;
 }
 
@@ -361,24 +416,27 @@ function renderFeedback(item) {
 }
 
 function renderAdminPage() {
-  const stats = getStats();
+  const managedComplaints = visibleComplaints();
+  const stats = getStats(managedComplaints);
+  const subtitle = isOfficer() ? `Showing complaints assigned to ${authProfile()?.department || "your department"}` : "Search, assign and update citizen grievances";
   return `<div class="page-stack">
     <section class="stats-grid compact-stats">${statCard("Total", stats.total, "☷")}${statCard("High Priority", stats.highPriority, "⚠", "", "danger")}${statCard("Active Work", stats.inProgress, "◉", "", "info")}${statCard("Resolved", stats.resolved, "✓", "", "success")}</section>
-    ${panel("Complaint management", "Search, assign and update citizen grievances", `<div class="filter-row"><div class="search-box">⌕<input id="adminSearch" placeholder="Search ID, title, citizen or location"></div><select id="statusFilter"><option>All</option>${STATUS_FLOW.map(s => `<option>${s}</option>`).join("")}</select><select id="priorityFilter"><option>All</option><option>High</option><option>Medium</option><option>Low</option></select></div><div id="adminTable">${complaintTable(complaints)}</div>`, '<button id="resetDemo" class="secondary-button small">Reset demo data</button>')}
+    ${panel("Complaint management", subtitle, `<div class="filter-row"><div class="search-box">⌕<input id="adminSearch" placeholder="Search ID, title, citizen or location"></div><select id="statusFilter"><option>All</option>${STATUS_FLOW.map(s => `<option>${s}</option>`).join("")}</select><select id="priorityFilter"><option>All</option><option>High</option><option>Medium</option><option>Low</option></select></div><div id="adminTable">${complaintTable(managedComplaints)}</div>`, isAdministrator() ? '<button id="resetDemo" class="secondary-button small">Reset demo data</button>' : '<span class="role-badge">Department scope</span>')}
   </div>`;
 }
 
 function renderAnalyticsPage() {
-  const stats = getStats();
-  const departments = countBy("department");
-  const rated = complaints.filter(item => item.rating);
+  const scopedComplaints = visibleComplaints();
+  const stats = getStats(scopedComplaints);
+  const departments = countBy("department", scopedComplaints);
+  const rated = scopedComplaints.filter(item => item.rating);
   const avg = rated.length ? (rated.reduce((sum, item) => sum + Number(item.rating), 0) / rated.length).toFixed(1) : "—";
-  const categories = countBy("category");
+  const categories = countBy("category", scopedComplaints);
   const top = categories[0];
   return `<div class="page-stack">
     <section class="insight-banner"><div class="section-icon purple">✦</div><div><p class="eyebrow">Operational intelligence</p><h2>Service performance overview</h2><p>${top ? `${escapeHtml(top.name)} currently has the highest workload with ${top.value} complaint${top.value === 1 ? "" : "s"}. The overall resolution rate is ${stats.resolutionRate}%.` : "No complaint data is available yet."}</p></div></section>
     <section class="stats-grid compact-stats">${statCard("Resolution Rate", `${stats.resolutionRate}%`, "◉", "", "success")}${statCard("High Priority", stats.highPriority, "⚠", "", "danger")}${statCard("Departments", departments.length, "⌂")}${statCard("Citizen Rating", avg === "—" ? avg : `${avg}/5`, "★", "", "warning")}</section>
-    <section class="two-column-grid">${panel("Category distribution", "Most reported civic issue types", renderDonut(categories))}${panel("Priority mix", "Urgency distribution of registered complaints", renderBars(countBy("priority"), "#7b4bb7"))}</section>
+    <section class="two-column-grid">${panel("Category distribution", "Most reported civic issue types", renderDonut(categories))}${panel("Priority mix", "Urgency distribution of registered complaints", renderBars(countBy("priority", scopedComplaints), "#7b4bb7"))}</section>
     ${panel("Department workload", "Number of complaints assigned to each department", renderBars(departments, "#1f6f5f"))}
   </div>`;
 }
@@ -407,13 +465,19 @@ function attachPageEvents() {
     document.getElementById("trackForm").addEventListener("submit", event => {
       event.preventDefault();
       const id = document.getElementById("trackId").value.trim().toLowerCase();
-      trackingResult = complaints.find(item => item.id.toLowerCase() === id) || null;
+      const found = complaints.find(item => item.id.toLowerCase() === id) || null;
+      trackingResult = found && canViewComplaint(found) ? found : null;
+      trackingError = found && !trackingResult
+        ? "This grievance is not linked to your account or assigned role."
+        : "No complaint was found. Check the grievance ID and try again.";
       document.getElementById("trackResult").innerHTML = renderTrackingResult(trackingResult);
       attachTrackingEvents();
     });
-    document.getElementById("demoTrack").addEventListener("click", () => {
+    document.getElementById("demoTrack")?.addEventListener("click", () => {
       document.getElementById("trackId").value = "GRV-2026-001";
-      trackingResult = complaints.find(item => item.id === "GRV-2026-001") || null;
+      const found = complaints.find(item => item.id === "GRV-2026-001") || null;
+      trackingResult = found && canViewComplaint(found) ? found : null;
+      trackingError = found && !trackingResult ? "This demo grievance is outside your assigned role." : "The demo grievance could not be found.";
       document.getElementById("trackResult").innerHTML = renderTrackingResult(trackingResult);
       attachTrackingEvents();
     });
@@ -425,7 +489,14 @@ function attachPageEvents() {
 
 function submitComplaint(event) {
   event.preventDefault();
+  if (!isCitizen()) {
+    showToast("Only citizen accounts can submit complaints.");
+    return;
+  }
   const data = Object.fromEntries(new FormData(event.currentTarget));
+  const profile = authProfile();
+  data.citizenName = profile?.displayName || data.citizenName;
+  data.email = profile?.email || data.email;
   const analysis = analyseComplaint(data.title, data.description);
   const location = data.location.toLowerCase();
   const duplicate = complaints.find(item => item.status !== "Resolved" && item.category === analysis.category && (item.location.toLowerCase().includes(location) || location.includes(item.location.toLowerCase())));
@@ -443,7 +514,9 @@ function submitComplaint(event) {
     resolutionNote: "",
     rating: null,
     feedback: "",
-    duplicateId: duplicate?.id || ""
+    duplicateId: duplicate?.id || "",
+    createdByUid: profile?.uid || "",
+    createdByEmail: profile?.email || ""
   };
   complaints.unshift(complaint);
   saveComplaints();
@@ -453,6 +526,7 @@ function submitComplaint(event) {
 }
 
 function attachTrackingEvents() {
+  if (!trackingResult || !isCitizen() || !window.CivicAuth.ownsComplaint(trackingResult)) return;
   let currentRating = trackingResult?.rating || 5;
   document.querySelectorAll("[data-rating]").forEach(button => button.addEventListener("click", () => {
     currentRating = Number(button.dataset.rating);
@@ -475,12 +549,13 @@ function attachTrackingEvents() {
 }
 
 function attachAdminEvents() {
+  if (!window.CivicAuth.canAccess("admin")) return;
   const search = document.getElementById("adminSearch");
   const status = document.getElementById("statusFilter");
   const priority = document.getElementById("priorityFilter");
   const refresh = () => {
     const text = search.value.toLowerCase();
-    const filtered = complaints.filter(item => `${item.id} ${item.title} ${item.citizenName} ${item.location}`.toLowerCase().includes(text)
+    const filtered = visibleComplaints().filter(item => `${item.id} ${item.title} ${item.citizenName} ${item.location}`.toLowerCase().includes(text)
       && (status.value === "All" || item.status === status.value)
       && (priority.value === "All" || item.priority === priority.value));
     document.getElementById("adminTable").innerHTML = complaintTable(filtered);
@@ -489,7 +564,8 @@ function attachAdminEvents() {
   search.addEventListener("input", refresh);
   status.addEventListener("change", refresh);
   priority.addEventListener("change", refresh);
-  document.getElementById("resetDemo").addEventListener("click", () => {
+  document.getElementById("resetDemo")?.addEventListener("click", () => {
+    if (!isAdministrator()) return;
     if (!confirm("Reset all data to the original demo complaints?")) return;
     complaints = structuredClone(SAMPLE_COMPLAINTS);
     saveComplaints();
@@ -502,6 +578,10 @@ function attachAdminEvents() {
 function attachTableEvents() {
   document.querySelectorAll("[data-manage]").forEach(button => button.addEventListener("click", () => openManageModal(button.dataset.manage)));
   document.querySelectorAll("[data-delete]").forEach(button => button.addEventListener("click", () => {
+    if (!window.CivicAuth.canDeleteComplaint()) {
+      showToast("Only administrators can delete complaints.");
+      return;
+    }
     const id = button.dataset.delete;
     if (!confirm(`Delete complaint ${id}?`)) return;
     complaints = complaints.filter(item => item.id !== id);
@@ -514,13 +594,18 @@ function attachTableEvents() {
 function openManageModal(id) {
   const item = complaints.find(complaint => complaint.id === id);
   if (!item) return;
+  if (!window.CivicAuth.canManageComplaint(item)) {
+    showToast("This complaint is outside your assigned role.");
+    return;
+  }
   selectedComplaintId = id;
+  const adminOnly = !isAdministrator() ? "disabled" : "";
   document.getElementById("modalRoot").innerHTML = `<div id="modalBackdrop" class="modal-backdrop"><div class="modal">
     <div class="modal-header"><div><p class="eyebrow">${item.id}</p><h2>Update complaint</h2></div><button id="closeModal" class="icon-button">✕</button></div>
     <div class="modal-summary"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.location)}</span></div>
     <label class="field-label"><span>Status</span><select id="modalStatus">${STATUS_FLOW.map(status => `<option ${status === item.status ? "selected" : ""}>${status}</option>`).join("")}</select></label>
-    <label class="field-label"><span>Priority</span><select id="modalPriority">${["High","Medium","Low"].map(priority => `<option ${priority === item.priority ? "selected" : ""}>${priority}</option>`).join("")}</select></label>
-    <label class="field-label"><span>Assigned department</span><input id="modalDepartment" value="${escapeHtml(item.department)}"></label>
+    <label class="field-label"><span>Priority ${isOfficer() ? "(administrator controlled)" : ""}</span><select id="modalPriority" ${adminOnly}>${["High","Medium","Low"].map(priority => `<option ${priority === item.priority ? "selected" : ""}>${priority}</option>`).join("")}</select></label>
+    <label class="field-label"><span>Assigned department ${isOfficer() ? "(fixed to your department)" : ""}</span><input id="modalDepartment" value="${escapeHtml(item.department)}" ${adminOnly}></label>
     <label class="field-label"><span>Resolution / progress note</span><textarea id="modalNote" rows="5" placeholder="Add an official progress update.">${escapeHtml(item.resolutionNote || "")}</textarea></label>
     <div class="button-row end"><button id="cancelModal" class="secondary-button">Cancel</button><button id="saveModal" class="primary-button">Save Changes</button></div>
   </div></div>`;
@@ -529,9 +614,16 @@ function openManageModal(id) {
   document.getElementById("cancelModal").addEventListener("click", close);
   document.getElementById("modalBackdrop").addEventListener("click", event => { if (event.target.id === "modalBackdrop") close(); });
   document.getElementById("saveModal").addEventListener("click", () => {
+    if (!window.CivicAuth.canManageComplaint(item)) {
+      showToast("Your role can no longer update this complaint.");
+      close();
+      return;
+    }
     item.status = document.getElementById("modalStatus").value;
-    item.priority = document.getElementById("modalPriority").value;
-    item.department = document.getElementById("modalDepartment").value.trim();
+    if (isAdministrator()) {
+      item.priority = document.getElementById("modalPriority").value;
+      item.department = document.getElementById("modalDepartment").value.trim();
+    }
     item.resolutionNote = document.getElementById("modalNote").value.trim();
     saveComplaints();
     showToast(`Complaint ${id} updated.`);
@@ -540,4 +632,16 @@ function openManageModal(id) {
   });
 }
 
-renderApp();
+window.CivicAuth.ready().then(() => {
+  if (window.CivicAuth.isAuthenticated()) renderApp();
+  else window.CivicAuth.renderAuthScreen();
+});
+
+document.addEventListener("civic-auth-changed", event => {
+  lastSubmitted = null;
+  trackingResult = null;
+  trackingError = "";
+  selectedComplaintId = null;
+  activePage = "dashboard";
+  if (event.detail.authenticated) renderApp();
+});
