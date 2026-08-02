@@ -32,6 +32,72 @@ service cloud.firestore {
         && currentUser().data.department == data.department;
     }
 
+    function isValidRole(role) {
+      return role in ['citizen', 'department-officer', 'administrator'];
+    }
+
+    function isValidDepartment(department) {
+      return department in [
+        'Public Works Department', 'Municipal Waste Department',
+        'Water Supply Department', 'Electricity Department',
+        'Sanitation Department', 'Transport Department',
+        'Municipal Corporation', 'General Administration'
+      ];
+    }
+
+    function roleDepartmentIsValid(role, department) {
+      return (role == 'citizen' && department == '')
+        || (role == 'department-officer' && isValidDepartment(department))
+        || (role == 'administrator' && department == 'General Administration');
+    }
+
+    function userProfileIsValid(data, userId) {
+      let required = [
+        'uid', 'email', 'displayName', 'phone', 'role', 'department',
+        'createdAt', 'updatedAt'
+      ];
+      let permitted = [
+        'uid', 'email', 'displayName', 'phone', 'role', 'department',
+        'createdAt', 'updatedAt', 'roleUpdatedAt', 'roleUpdatedBy',
+        'roleUpdatedByName'
+      ];
+      return data.keys().hasAll(required)
+        && data.keys().hasOnly(permitted)
+        && data.uid == userId
+        && data.email is string
+        && data.email.size() >= 3
+        && data.email.size() <= 254
+        && data.displayName is string
+        && data.displayName.size() >= 2
+        && data.displayName.size() <= 120
+        && data.phone is string
+        && data.phone.size() <= 20
+        && isValidRole(data.role)
+        && data.department is string
+        && roleDepartmentIsValid(data.role, data.department)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('roleUpdatedAt' in data) || data.roleUpdatedAt is timestamp)
+        && (!('roleUpdatedBy' in data) || data.roleUpdatedBy is string)
+        && (!('roleUpdatedByName' in data) || data.roleUpdatedByName is string);
+    }
+
+    function administratorRoleUpdateIsValid(userId) {
+      return request.auth.uid != userId
+        && userProfileIsValid(request.resource.data, userId)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.displayName == resource.data.displayName
+        && request.resource.data.phone == resource.data.phone
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.roleUpdatedAt == request.time
+        && request.resource.data.roleUpdatedBy == request.auth.uid
+        && request.resource.data.roleUpdatedByName == currentUser().data.displayName
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['role', 'department', 'updatedAt', 'roleUpdatedAt', 'roleUpdatedBy', 'roleUpdatedByName']);
+    }
+
     function complaintFieldsAreComplete(data) {
       let fields = [
         'id', 'citizenName', 'email', 'phone', 'title', 'description',
@@ -121,22 +187,65 @@ service cloud.firestore {
     match /users/{userId} {
       allow create: if signedIn()
         && request.auth.uid == userId
-        && request.resource.data.uid == userId
+        && userProfileIsValid(request.resource.data, userId)
+        && request.resource.data.email == request.auth.token.email
         && request.resource.data.role == 'citizen'
-        && request.resource.data.department == '';
+        && request.resource.data.department == ''
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && !('roleUpdatedAt' in request.resource.data)
+        && !('roleUpdatedBy' in request.resource.data)
+        && !('roleUpdatedByName' in request.resource.data);
 
       allow read: if signedIn() && (request.auth.uid == userId || isAdministrator());
 
-      allow update: if isAdministrator()
+      allow update: if (isAdministrator() && administratorRoleUpdateIsValid(userId))
         || (signedIn()
           && request.auth.uid == userId
+          && userProfileIsValid(request.resource.data, userId)
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.email == resource.data.email
           && request.resource.data.role == resource.data.role
           && request.resource.data.department == resource.data.department
-          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.updatedAt == request.time
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['displayName', 'phone', 'updatedAt']));
 
-      allow delete: if isAdministrator();
+      allow delete: if false;
+    }
+
+    match /roleAudit/{auditId} {
+      allow read: if isAdministrator();
+
+      allow create: if isAdministrator()
+        && request.resource.data.keys().hasAll([
+          'targetUid', 'targetEmail', 'targetDisplayName',
+          'previousRole', 'previousDepartment', 'newRole', 'newDepartment',
+          'changedByUid', 'changedByEmail', 'changedByName', 'changedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'targetUid', 'targetEmail', 'targetDisplayName',
+          'previousRole', 'previousDepartment', 'newRole', 'newDepartment',
+          'changedByUid', 'changedByEmail', 'changedByName', 'changedAt'
+        ])
+        && request.resource.data.targetUid is string
+        && request.resource.data.targetUid != request.auth.uid
+        && request.resource.data.targetEmail is string
+        && request.resource.data.targetDisplayName is string
+        && isValidRole(request.resource.data.previousRole)
+        && request.resource.data.previousDepartment is string
+        && isValidRole(request.resource.data.newRole)
+        && roleDepartmentIsValid(
+          request.resource.data.newRole,
+          request.resource.data.newDepartment
+        )
+        && request.resource.data.changedByUid == request.auth.uid
+        && request.resource.data.changedByEmail == request.auth.token.email
+        && request.resource.data.changedByName == currentUser().data.displayName
+        && request.resource.data.changedAt == request.time;
+
+      allow update, delete: if false;
     }
 
     match /complaints/{complaintId} {

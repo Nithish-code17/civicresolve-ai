@@ -24,6 +24,9 @@ CivicResolve AI is an intelligent public grievance redressal portal. Citizens ca
 - Real-time citizen, department-officer and administrator views
 - Timestamped complaint status history
 - One-time migration of eligible citizen LocalStorage complaints
+- Administrator-only real-time user directory
+- Secure citizen-to-officer/admin role assignment with department scoping
+- Immediate role refresh for active sessions and append-only role audit records
 - Responsive mobile and desktop design
 
 ## Version 2 interface enhancements
@@ -58,6 +61,7 @@ civicresolve-ai/
 │       ├── auth.js
 │       ├── firebase-config.js
 │       ├── firestore-data.js
+│       ├── role-accounts.js
 │       └── v2-ui.js
 ├── docs/
 │   ├── ARCHITECTURE.md

@@ -66,9 +66,34 @@ Citizen registration creates this profile automatically:
 }
 ```
 
-## 5. Provision officers and administrators
+## 5. Bootstrap the first administrator
 
-Officer and administrator roles must not be selected from the browser. Create the user in Firebase Authentication, then create or update the matching `users/{uid}` document using the Firebase Console or a trusted Admin SDK process.
+The public registration screen can create only Citizen profiles. Bootstrap exactly one trusted administrator manually in Firebase Console:
+
+1. Sign in to CivicResolve once with the administrator's email or Google account.
+2. Open **Firestore Database → Data → users**.
+3. Open the document whose ID matches that account's Firebase Authentication UID.
+4. Set `role` to `administrator`.
+5. Set `department` to `General Administration`.
+6. Sign out and sign back in once if the Role Accounts page does not appear immediately.
+
+After this one-time bootstrap, use the in-app **Role Accounts** workspace for all normal role assignments. Do not offer officer or administrator selection on the public registration form.
+
+## 6. Provision officers and additional administrators
+
+Use this workflow instead of creating shared credentials:
+
+1. Ask the person to register using their own email/password or Google account.
+2. Sign in with the bootstrapped administrator account.
+3. Open **Role Accounts**.
+4. Search for the registered name or email.
+5. Choose **Change role**.
+6. Select **Department Officer** and an exact department, or select **Administrator**.
+7. Verify the confirmation and save.
+
+The new permissions take effect in the person's active session through the real-time profile listener. Every assignment also creates an immutable record in `roleAudit/{auditId}`.
+
+The console examples below document the resulting profile shape. Manual changes are reserved for disaster recovery or the initial administrator bootstrap.
 
 Department officer example:
 
@@ -98,7 +123,7 @@ Administrator example:
 
 The `department` value for an officer must exactly match the complaint department value used by the application.
 
-## 6. Role permission matrix
+## 7. Role permission matrix
 
 | Capability | Citizen | Department officer | Administrator |
 |---|---:|---:|---:|
@@ -110,8 +135,11 @@ The `department` value for an officer must exactly match the complaint departmen
 | Reassign department | No | No | Yes |
 | View analytics | No | Assigned department | All |
 | Delete complaint | No | No | Yes |
+| List user profiles | No | No | Yes |
+| Assign officer/admin roles | No | No | Yes, except own account |
+| Send password-reset email | No | No | Yes |
 
-## 7. Complaint documents
+## 8. Complaint documents
 
 Every complaint is stored at:
 
@@ -130,11 +158,34 @@ Important protected fields include:
 
 The browser subscribes with Firebase `onSnapshot()` and uses a different query for each role. Citizens query their UID, officers query their exact department and administrators query all complaints. Do not replace these queries with an unrestricted collection download followed by browser filtering because Firestore rules evaluate queries against their possible result set.
 
-## 8. Local complaint migration
+## 9. Role audit documents
+
+Every role change creates a server-timestamped document at:
+
+```text
+roleAudit/{generatedId}
+```
+
+Audit documents record the target UID/email/name, previous role and department, new role and department, and the administrator who made the change. Clients cannot edit or delete these records.
+
+## 10. Local complaint migration
 
 After a citizen signs in for the first time, CivicResolve checks for complaint data created by the older LocalStorage version. Eligible `Submitted` complaints owned by the same UID or email are copied to Firestore once. Demo samples and complaints belonging to another account are not migrated.
 
 LocalStorage remains the active data source only when Firebase configuration is absent and demo mode is explicitly enabled.
+
+## 11. Restrict the Firebase Web API key
+
+The Firebase Web API key identifies the project and is intentionally present in browser source, but it should still be restricted in **Google Cloud Console → APIs & Services → Credentials**:
+
+- Application restriction: **Websites**
+- Allowed referrers:
+  - `https://civicresolve-ai-beta.vercel.app/*`
+  - `https://civicresolve-ai-3d54c.firebaseapp.com/*`
+  - `http://localhost:*/*`
+- API restriction: limit the key to the Firebase/Google APIs used by this web app.
+
+Never commit a service-account JSON file, private key or Firebase Admin SDK credential.
 
 ## Demo mode
 
