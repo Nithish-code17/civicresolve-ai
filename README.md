@@ -1,13 +1,13 @@
-# CivicResolve AI
+# CivicResolve AI — Version 2
 
 CivicResolve AI is an intelligent public grievance redressal portal. Citizens can report and track civic issues, while administrators can classify, prioritise, assign, update and analyse complaints from a single dashboard.
 
 ## Branches
 
-- `main` — stable MVP backup
-- `enhancement-v2` — active development branch for Version 2
+- `main` — protected stable MVP
+- `enhancement-v2` — active Version 2 development
 
-## Current MVP features
+## Current features
 
 - Citizen complaint submission
 - Automatic category detection
@@ -23,9 +23,17 @@ CivicResolve AI is an intelligent public grievance redressal portal. Citizens ca
 - Browser LocalStorage persistence
 - Responsive mobile and desktop design
 
-## Version 2 goals
+## Version 2 interface enhancements
 
-Version 2 will add a more maintainable project structure, modern user experience, cloud data storage, authentication, role-based dashboards, evidence uploads, location mapping, status history, SLA monitoring and stronger AI assistance.
+- Professional government-service visual design
+- Blue civic administration design system
+- Improved sidebar, top bar, cards, tables, forms and modals
+- Light and dark themes with saved preference
+- Global complaint search using `Ctrl + K`
+- Smooth page and dashboard-card transitions
+- Improved responsive layouts for desktop, tablet and mobile
+- Enhanced contrast, focus states and keyboard navigation
+- Non-destructive enhancement layer that preserves the stable complaint logic
 
 ## Project structure
 
@@ -33,9 +41,11 @@ Version 2 will add a more maintainable project structure, modern user experience
 civicresolve-ai/
 ├── assets/
 │   ├── css/
-│   │   └── styles.css
+│   │   ├── styles.css
+│   │   └── v2.css
 │   └── js/
-│       └── app.js
+│       ├── app.js
+│       └── v2-ui.js
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   └── ENHANCEMENT_ROADMAP.md
@@ -47,13 +57,11 @@ civicresolve-ai/
 
 ## Run locally
 
-From the project directory, start a local server:
-
 ```bash
 python -m http.server 5500
 ```
 
-Then open `http://localhost:5500` in a browser.
+Open `http://localhost:5500` in a browser.
 
 ## Demo grievance ID
 
@@ -65,7 +73,6 @@ GRV-2026-001
 
 The project is a static HTML, CSS and JavaScript application and can be deployed directly to Vercel. No build command is required.
 
-## Documentation
+## Next phase
 
-- Read `docs/ARCHITECTURE.md` for the Version 2 structure and design principles.
-- Read `docs/ENHANCEMENT_ROADMAP.md` for the planned development phases.
+The next major enhancement is Firebase Authentication with citizen, department-officer and administrator roles.
