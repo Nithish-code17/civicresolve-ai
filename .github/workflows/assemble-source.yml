@@ -1,0 +1,43 @@
+name: Assemble CivicResolve source
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Assemble application files
+        shell: bash
+        run: |
+          cat .build-parts/app-1.part .build-parts/app-2.part .build-parts/app-3.part .build-parts/app-4.part > app.js
+          cat .build-parts/styles-1.part .build-parts/styles-2.part .build-parts/styles-3.part > styles.css
+
+      - name: Verify uploaded files
+        shell: bash
+        run: |
+          echo "162776418d2d7b799b151088928f5fd4386f389e66a2964e540cbcf28ec2a1ff  app.js" | sha256sum -c -
+          echo "93a7ae8ac876fe016741016904a2ea73870702c0ddcf4271be9570ee75cbe99c  styles.css" | sha256sum -c -
+
+      - name: Commit completed project
+        shell: bash
+        run: |
+          rm -rf .build-parts
+          rm -f .github/workflows/assemble-source.yml
+          rmdir .github/workflows 2>/dev/null || true
+          rmdir .github 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Upload complete CivicResolve AI MVP"
+          git push origin main
