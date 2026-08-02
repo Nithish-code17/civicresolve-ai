@@ -1,0 +1,140 @@
+      ${field("Email address", "email", "name@example.com", true, "email")}
+      ${field("Complaint title", "title", "Example: Streetlight not working", true)}
+      <label class="field-label"><span>Detailed description</span><textarea id="description" name="description" placeholder="Describe the problem, how long it has existed and whether it creates danger." required minlength="15" rows="6"></textarea></label>
+      ${field("Location / landmark", "location", "Example: Near Gandhipuram Bus Stand", true)}
+      <div class="form-note">✓ Your contact information is used only for complaint tracking in this demo.</div>
+      <button class="primary-button full-width" type="submit">✦ Analyse and Submit Complaint</button>
+    </form>
+    <aside id="analysisCard" class="analysis-card">${renderEmptyAnalysis()}</aside>
+  </div>`;
+}
+
+function field(label, name, placeholder, required = false, type = "text", extra = "") {
+  return `<label class="field-label"><span>${label}</span><input id="${name}" name="${name}" type="${type}" placeholder="${placeholder}" ${required ? "required" : ""} ${extra}></label>`;
+}
+
+function renderEmptyAnalysis() {
+  return `<div class="section-heading compact"><div class="section-icon purple">✦</div><div><h3>Smart analysis</h3><p>Live classification preview</p></div></div><div class="empty-analysis"><div class="big-icon">⌕</div><h3>Waiting for complaint details</h3><p>Start entering the title and description to view automatic classification.</p></div>`;
+}
+
+function renderAnalysis(analysis) {
+  return `<div class="section-heading compact"><div class="section-icon purple">✦</div><div><h3>Smart analysis</h3><p>Live classification preview</p></div></div>
+    <div class="analysis-results">
+      ${analysisItem("Detected category", analysis.category)}
+      ${analysisItem("Assigned department", analysis.department)}
+      ${analysisItem("Priority level", priorityBadge(analysis.priority), true)}
+      ${analysisItem("Estimated resolution", `${analysis.days} working day${analysis.days === 1 ? "" : "s"}`)}
+      <div class="smart-message">✦<p>${smartAdvice(analysis.category, analysis.priority)}</p></div>
+    </div>`;
+}
+
+function analysisItem(label, value, raw = false) {
+  return `<div class="analysis-item"><span>${label}</span><strong>${raw ? value : escapeHtml(value)}</strong></div>`;
+}
+
+function smartAdvice(category, priority) {
+  if (priority === "High") return "Safety-related language was detected. This complaint will be highlighted for urgent administrative review.";
+  if (category.includes("Electricity")) return "Avoid touching exposed wires or damaged equipment. Maintain a safe distance until officials arrive.";
+  if (category.includes("Water")) return "The issue will be directed to the water supply department with an estimated two-day response window.";
+  return "The complaint will be routed automatically to the most relevant department.";
+}
+
+function renderSubmissionSuccess(item) {
+  return `<div class="success-page"><div class="success-icon">✓</div><p class="eyebrow">Complaint registered successfully</p><h2>${item.id}</h2><p>Save this grievance ID. It is required to track the complaint.</p>
+    <div class="result-card">${resultRow("Category", item.category)}${resultRow("Department", item.department)}${resultRow("Priority", item.priority)}${resultRow("Expected resolution", formatDate(item.expectedResolutionDate))}</div>
+    ${item.duplicateId ? `<div class="alert warning">⚠ <span>A similar unresolved complaint may already exist: <strong>${item.duplicateId}</strong>.</span></div>` : ""}
+    <div class="button-row center"><button class="primary-button" data-success-go="track">⌕ Track Complaint</button><button class="secondary-button" id="submitAnother">Submit Another</button></div></div>`;
+}
+
+function resultRow(label, value) { return `<div class="result-row"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`; }
+
+function renderTrackPage() {
+  return `<div class="page-stack">
+    <section class="track-hero"><div class="track-icon">⌕</div><p class="eyebrow">Transparent progress tracking</p><h2>Track your grievance</h2><p>Enter the complaint ID received after submission.</p>
+      <form id="trackForm" class="track-search"><input id="trackId" placeholder="Example: GRV-2026-001" required><button class="primary-button" type="submit">⌕ Track</button></form>
+      <button id="demoTrack" class="sample-link">Try demo ID: GRV-2026-001</button>
+    </section>
+    <div id="trackResult">${trackingResult ? renderTrackingResult(trackingResult) : ""}</div>
+  </div>`;
+}
+
+function renderTrackingResult(item) {
+  if (!item) return `<div class="alert error">⚠ <span>No complaint was found. Check the grievance ID and try again.</span></div>`;
+  const currentIndex = STATUS_FLOW.indexOf(item.status);
+  return `<section class="tracking-result">
+    <div class="tracking-header"><div><p class="eyebrow">${escapeHtml(item.id)}</p><h2>${escapeHtml(item.title)}</h2>${statusBadge(item.status)}</div>${priorityBadge(item.priority + " priority").replace(`priority-${item.priority.toLowerCase()} priority`, `priority-${item.priority.toLowerCase()}`)}</div>
+    <div class="details-grid">
+      ${detailCard("👤", "Citizen", item.citizenName)}${detailCard("⌖", "Location", item.location)}${detailCard("▤", "Department", item.department)}${detailCard("◷", "Expected resolution", formatDate(item.expectedResolutionDate))}
+    </div>
+    <div class="description-block"><strong>Complaint description</strong><p>${escapeHtml(item.description)}</p></div>
+    <div class="timeline-card"><h3>Status timeline</h3><div class="timeline">${STATUS_FLOW.map((status, index) => `<div class="timeline-step ${index <= currentIndex ? "complete" : ""} ${index === currentIndex ? "current" : ""}"><div class="timeline-marker">${index <= currentIndex ? "✓" : "○"}</div><span>${status}</span></div>`).join("")}</div></div>
+    ${item.resolutionNote ? `<div class="resolution-note">✓<div><strong>Department update</strong><p>${escapeHtml(item.resolutionNote)}</p></div></div>` : ""}
+    ${item.status === "Resolved" ? renderFeedback(item) : ""}
+  </section>`;
+}
+
+function detailCard(icon, label, value) { return `<article class="detail-card"><span class="detail-icon">${icon}</span><div><span>${label}</span><strong>${escapeHtml(value)}</strong></div></article>`; }
+
+function renderFeedback(item) {
+  const rating = item.rating || 5;
+  return `<div class="feedback-card"><h3>Rate the resolution</h3><div id="stars" class="stars">${[1,2,3,4,5].map(value => `<button type="button" class="star ${value <= rating ? "active" : ""}" data-rating="${value}">★</button>`).join("")}</div><textarea id="feedbackText" rows="3" placeholder="Share your feedback about the resolution.">${escapeHtml(item.feedback || "")}</textarea><button id="saveFeedback" class="primary-button" data-id="${item.id}" data-rating="${rating}">Save Feedback</button></div>`;
+}
+
+function renderAdminPage() {
+  const stats = getStats();
+  return `<div class="page-stack">
+    <section class="stats-grid compact-stats">${statCard("Total", stats.total, "☷")}${statCard("High Priority", stats.highPriority, "⚠", "", "danger")}${statCard("Active Work", stats.inProgress, "◉", "", "info")}${statCard("Resolved", stats.resolved, "✓", "", "success")}</section>
+    ${panel("Complaint management", "Search, assign and update citizen grievances", `<div class="filter-row"><div class="search-box">⌕<input id="adminSearch" placeholder="Search ID, title, citizen or location"></div><select id="statusFilter"><option>All</option>${STATUS_FLOW.map(s => `<option>${s}</option>`).join("")}</select><select id="priorityFilter"><option>All</option><option>High</option><option>Medium</option><option>Low</option></select></div><div id="adminTable">${complaintTable(complaints)}</div>`, '<button id="resetDemo" class="secondary-button small">Reset demo data</button>')}
+  </div>`;
+}
+
+function renderAnalyticsPage() {
+  const stats = getStats();
+  const departments = countBy("department");
+  const rated = complaints.filter(item => item.rating);
+  const avg = rated.length ? (rated.reduce((sum, item) => sum + Number(item.rating), 0) / rated.length).toFixed(1) : "—";
+  const categories = countBy("category");
+  const top = categories[0];
+  return `<div class="page-stack">
+    <section class="insight-banner"><div class="section-icon purple">✦</div><div><p class="eyebrow">Operational intelligence</p><h2>Service performance overview</h2><p>${top ? `${escapeHtml(top.name)} currently has the highest workload with ${top.value} complaint${top.value === 1 ? "" : "s"}. The overall resolution rate is ${stats.resolutionRate}%.` : "No complaint data is available yet."}</p></div></section>
+    <section class="stats-grid compact-stats">${statCard("Resolution Rate", `${stats.resolutionRate}%`, "◉", "", "success")}${statCard("High Priority", stats.highPriority, "⚠", "", "danger")}${statCard("Departments", departments.length, "⌂")}${statCard("Citizen Rating", avg === "—" ? avg : `${avg}/5`, "★", "", "warning")}</section>
+    <section class="two-column-grid">${panel("Category distribution", "Most reported civic issue types", renderDonut(categories))}${panel("Priority mix", "Urgency distribution of registered complaints", renderBars(countBy("priority"), "#7b4bb7"))}</section>
+    ${panel("Department workload", "Number of complaints assigned to each department", renderBars(departments, "#1f6f5f"))}
+  </div>`;
+}
+
+function attachPageEvents() {
+  document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click", () => navigate(button.dataset.go)));
+
+  if (activePage === "submit") {
+    if (lastSubmitted) {
+      document.querySelector("[data-success-go]")?.addEventListener("click", () => { trackingResult = lastSubmitted; navigate("track"); });
+      document.getElementById("submitAnother")?.addEventListener("click", () => { lastSubmitted = null; renderApp(); });
+      return;
+    }
+    const title = document.getElementById("title");
+    const description = document.getElementById("description");
+    const updateAnalysis = () => {
+      const combined = `${title.value}${description.value}`.trim();
+      document.getElementById("analysisCard").innerHTML = combined.length >= 8 ? renderAnalysis(analyseComplaint(title.value, description.value)) : renderEmptyAnalysis();
+    };
+    title.addEventListener("input", updateAnalysis);
+    description.addEventListener("input", updateAnalysis);
+    document.getElementById("complaintForm").addEventListener("submit", submitComplaint);
+  }
+
+  if (activePage === "track") {
+    document.getElementById("trackForm").addEventListener("submit", event => {
+      event.preventDefault();
+      const id = document.getElementById("trackId").value.trim().toLowerCase();
+      trackingResult = complaints.find(item => item.id.toLowerCase() === id) || null;
+      document.getElementById("trackResult").innerHTML = renderTrackingResult(trackingResult);
+      attachTrackingEvents();
+    });
+    document.getElementById("demoTrack").addEventListener("click", () => {
+      document.getElementById("trackId").value = "GRV-2026-001";
+      trackingResult = complaints.find(item => item.id === "GRV-2026-001") || null;
+      document.getElementById("trackResult").innerHTML = renderTrackingResult(trackingResult);
+      attachTrackingEvents();
+    });
+    attachTrackingEvents();
