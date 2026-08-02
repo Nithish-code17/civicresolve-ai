@@ -1,27 +1,36 @@
 # CivicResolve AI — Enhancement Roadmap
 
-## Phase 1 — Safe foundation
+## Completed
 
-- Protect the stable MVP in `main`
-- Develop only in `enhancement-v2`
-- Organise CSS, JavaScript and documentation into clear folders
-- Improve metadata and accessibility foundations
-- Verify the existing workflow after restructuring
+### Phase 1 — Safe foundation
 
-## Phase 2 — Modern interface
+- Protected the stable MVP in `main`
+- Created and used the `enhancement-v2` branch
+- Organised CSS, JavaScript and documentation into dedicated folders
+- Improved metadata and accessibility foundations
+- Preserved the working LocalStorage complaint workflow
 
-- Redesign the landing/dashboard experience
-- Improve navigation, forms, tables, status badges and modals
-- Add responsive mobile navigation
-- Add loading, empty and error states
-- Improve keyboard navigation and accessibility
+### Phase 2 — Modern interface
 
-## Phase 3 — Authentication and roles
+- Redesigned the dashboard, sidebar, top bar and hero section
+- Improved statistic cards, charts, forms, tables and modals
+- Added a professional civic-administration colour system
+- Added light and dark themes with saved preference
+- Added global complaint search with `Ctrl + K`
+- Added responsive desktop, tablet and mobile layouts
+- Added page and dashboard-card transitions
+- Improved focus states and keyboard accessibility
+- Added the enhancement as separate `v2.css` and `v2-ui.js` layers to reduce regression risk
 
-- Add Firebase Authentication
-- Add citizen registration and login
-- Add officer and administrator roles
+## Next: Phase 3 — Authentication and roles
+
+- Configure Firebase
+- Add email and password registration
+- Add Google sign-in
+- Add password reset
+- Add citizen, department-officer and administrator roles
 - Protect role-specific dashboards
+- Prevent normal users from opening administrative management features
 
 ## Phase 4 — Cloud database
 
@@ -32,7 +41,7 @@
 
 ## Phase 5 — Evidence and location
 
-- Upload complaint and resolution evidence
+- Upload complaint and resolution evidence to Firebase Storage
 - Validate image and document files
 - Add map-based location selection
 - Store address, latitude and longitude
@@ -51,7 +60,7 @@
 - Integrate Gemini for classification, priority and summarisation
 - Generate suggested officer responses
 - Retain keyword-based fallback logic
-- Protect API credentials through server-side functions or environment configuration
+- Protect API credentials using server-side functions and environment variables
 
 ## Phase 8 — Reporting and release
 
@@ -60,7 +69,3 @@
 - Test citizen, officer and administrator journeys
 - Deploy the Version 2 preview
 - Merge into `main` only after acceptance testing
-
-## Immediate next task
-
-After the safe restructuring commit, the next implementation task is the Version 2 visual redesign while preserving the working LocalStorage complaint logic.
