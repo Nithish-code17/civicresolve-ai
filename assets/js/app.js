@@ -26,6 +26,10 @@ let complaintDataError = "";
 let complaintUnsubscribe = null;
 let complaintSyncKey = "";
 const migrationChecks = new Set();
+let roleAccounts = [];
+let roleAccountsReady = false;
+let roleAccountsError = "";
+let roleAccountsUnsubscribe = null;
 
 function authProfile() { return window.CivicAuth?.getProfile() || null; }
 function currentRole() { return window.CivicAuth?.getRole() || "citizen"; }
@@ -130,7 +134,8 @@ function pageTitle(page) {
     submit: "Submit a Complaint",
     track: "Track a Complaint",
     admin: isOfficer() ? "Department Complaint Management" : "Admin Complaint Management",
-    analytics: "Analytics & Insights"
+    analytics: "Analytics & Insights",
+    accounts: "Role Accounts"
   }[page];
 }
 
@@ -143,7 +148,8 @@ function appShell() {
     ["submit", "+", "Submit Complaint"],
     ["track", "⌕", "Track Complaint"],
     ["admin", "☷", isOfficer() ? "Department Work" : "Admin Management"],
-    ["analytics", "▥", "Analytics"]
+    ["analytics", "▥", "Analytics"],
+    ["accounts", "♙", "Role Accounts"]
   ].filter(([page]) => window.CivicAuth.canAccess(page));
   return `
     <div class="app-shell">
@@ -188,6 +194,7 @@ function renderApp() {
 }
 
 function renderPage() {
+  if (activePage === "accounts") return renderRoleAccountsPage();
   if (!complaintDataReady) return renderComplaintDataState();
   if (activePage === "submit") return renderSubmitPage();
   if (activePage === "track") return renderTrackPage();
@@ -511,9 +518,104 @@ function renderAnalyticsPage() {
   </div>`;
 }
 
+function roleAccountErrorMessage(error) {
+  const messages = {
+    "permission-denied": "Firestore denied role management. Confirm this profile is an administrator and publish the latest security rules.",
+    "unavailable": "Role accounts are temporarily unavailable. Check your connection and try again."
+  };
+  return messages[error?.code] || error?.message || "The role account connection failed.";
+}
+
+function stopRoleAccountSync() {
+  roleAccountsUnsubscribe?.();
+  roleAccountsUnsubscribe = null;
+  roleAccounts = [];
+  roleAccountsReady = false;
+  roleAccountsError = "";
+}
+
+function startRoleAccountSync(force = false) {
+  if (!isAdministrator() || !window.CivicRoleAccounts) return;
+  if (!force && roleAccountsUnsubscribe) return;
+  roleAccountsUnsubscribe?.();
+  roleAccountsUnsubscribe = null;
+  roleAccountsReady = false;
+  roleAccountsError = "";
+  try {
+    roleAccountsUnsubscribe = window.CivicRoleAccounts.subscribe(accounts => {
+      roleAccounts = accounts;
+      roleAccountsReady = true;
+      roleAccountsError = "";
+      if (activePage === "accounts") renderApp();
+    }, error => {
+      console.error("Role account listener failed.", error);
+      roleAccountsReady = false;
+      roleAccountsError = roleAccountErrorMessage(error);
+      if (activePage === "accounts") renderApp();
+    });
+  } catch (error) {
+    console.error("Role account connection could not start.", error);
+    roleAccountsReady = false;
+    roleAccountsError = roleAccountErrorMessage(error);
+    renderApp();
+  }
+}
+
+function roleLabel(role) {
+  return {
+    citizen: "Citizen",
+    "department-officer": "Department Officer",
+    administrator: "Administrator"
+  }[role] || "Citizen";
+}
+
+function roleAccountTable(accounts) {
+  if (!accounts.length) return '<div class="empty-table">No role accounts match these filters.</div>';
+  const currentUid = authProfile()?.uid;
+  return `<div class="table-wrap"><table class="data-table role-account-table"><thead><tr><th>User</th><th>Contact</th><th>Access</th><th>Department</th><th>Role history</th><th>Actions</th></tr></thead><tbody>${accounts.map(account => {
+    const initials = account.displayName.split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase();
+    const ownAccount = account.uid === currentUid;
+    const roleChanged = account.roleUpdatedAt
+      ? `${formatDateTime(account.roleUpdatedAt)}${account.roleUpdatedByName ? ` by ${escapeHtml(account.roleUpdatedByName)}` : ""}`
+      : "Initial account role";
+    return `<tr>
+      <td><div class="role-user"><span class="role-user-avatar">${escapeHtml(initials)}</span><div><strong>${escapeHtml(account.displayName)}</strong><span class="table-subtext">UID: ${escapeHtml(account.uid.slice(0, 12))}…</span></div></div></td>
+      <td><strong>${escapeHtml(account.email)}</strong><span class="table-subtext">${escapeHtml(account.phone || "No phone added")}</span></td>
+      <td><span class="account-role role-${escapeHtml(account.role)}">${escapeHtml(roleLabel(account.role))}</span></td>
+      <td>${escapeHtml(account.department || "Not assigned")}</td>
+      <td><span class="table-subtext">${roleChanged}</span></td>
+      <td><div class="role-actions"><button class="table-button" data-role-edit="${escapeHtml(account.uid)}" ${ownAccount ? "disabled" : ""}>${ownAccount ? "Current account" : "Change role"}</button><button class="text-button role-reset" data-role-reset="${escapeHtml(account.uid)}">Reset password</button></div></td>
+    </tr>`;
+  }).join("")}</tbody></table></div>`;
+}
+
+function renderRoleAccountsPage() {
+  if (!isAdministrator()) return '<section class="data-state-card error-state"><div class="data-state-icon">⚠</div><h2>Administrator access required</h2><p>This workspace is available only to verified CivicResolve administrators.</p></section>';
+  if (roleAccountsError) return `<section class="data-state-card error-state"><div class="data-state-icon">⚠</div><p class="eyebrow">Secure role management</p><h2>Role accounts could not be loaded</h2><p>${escapeHtml(roleAccountsError)}</p><button id="retryRoleAccounts" class="primary-button" type="button">Retry connection</button></section>`;
+  if (!roleAccountsReady) return `<section class="data-state-card"><div class="data-spinner" aria-hidden="true"></div><p class="eyebrow">Secure role management</p><h2>Loading authorised accounts…</h2><p>CivicResolve is opening the administrator-only user directory.</p></section>`;
+
+  const citizenCount = roleAccounts.filter(account => account.role === "citizen").length;
+  const officerCount = roleAccounts.filter(account => account.role === "department-officer").length;
+  const adminCount = roleAccounts.filter(account => account.role === "administrator").length;
+  return `<div class="page-stack">
+    <section class="role-onboarding">
+      <div><p class="eyebrow">Safe account onboarding</p><h2>Create first, then assign official access</h2><p>The account owner signs up with email or Google. Their profile appears here as a Citizen, and an administrator assigns the verified role and department.</p></div>
+      <div class="role-onboarding-steps"><span><b>1</b> User registers</span><span><b>2</b> Admin verifies</span><span><b>3</b> Role activates live</span></div>
+      <button id="copyOnboarding" class="secondary-button small" type="button">Copy onboarding steps</button>
+    </section>
+    <section class="stats-grid compact-stats">${statCard("All Accounts", roleAccounts.length, "♙")}${statCard("Citizens", citizenCount, "◉", "", "info")}${statCard("Officers", officerCount, "▤", "", "warning")}${statCard("Administrators", adminCount, "⚙", "", "success")}</section>
+    ${panel("User role management", "Only administrators can assign or change official access", `<div class="role-filter-row"><div class="search-box">⌕<input id="roleSearch" placeholder="Search name, email or department"></div><select id="roleFilter"><option value="All">All roles</option><option value="citizen">Citizens</option><option value="department-officer">Department officers</option><option value="administrator">Administrators</option></select></div><div id="roleAccountTable">${roleAccountTable(roleAccounts)}</div>`, '<span class="role-badge">Live Firestore</span>')}
+  </div>`;
+}
+
 function attachPageEvents() {
   document.getElementById("retryComplaintSync")?.addEventListener("click", () => startComplaintSync(true));
   document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click", () => navigate(button.dataset.go)));
+
+  if (activePage === "accounts") {
+    attachRoleAccountEvents();
+    return;
+  }
 
   if (!complaintDataReady) return;
 
@@ -558,6 +660,114 @@ function attachPageEvents() {
   }
 
   if (activePage === "admin") attachAdminEvents();
+}
+
+function attachRoleAccountEvents() {
+  document.getElementById("retryRoleAccounts")?.addEventListener("click", () => startRoleAccountSync(true));
+  if (!roleAccountsReady && !roleAccountsError) {
+    startRoleAccountSync();
+    return;
+  }
+  if (!roleAccountsReady) return;
+
+  const search = document.getElementById("roleSearch");
+  const filter = document.getElementById("roleFilter");
+  const refresh = () => {
+    const query = search.value.trim().toLowerCase();
+    const matches = roleAccounts.filter(account => `${account.displayName} ${account.email} ${account.department}`.toLowerCase().includes(query)
+      && (filter.value === "All" || account.role === filter.value));
+    document.getElementById("roleAccountTable").innerHTML = roleAccountTable(matches);
+    attachRoleAccountTableEvents();
+  };
+  search.addEventListener("input", refresh);
+  filter.addEventListener("change", refresh);
+  document.getElementById("copyOnboarding")?.addEventListener("click", async () => {
+    const steps = "CivicResolve role account setup: 1) Register at the CivicResolve sign-in page using email/password or Google. 2) Tell the municipal administrator the registered email address and required department. 3) The administrator verifies the person and assigns Department Officer or Administrator access.";
+    try {
+      await navigator.clipboard.writeText(steps);
+      showToast("Account onboarding steps copied.");
+    } catch {
+      showToast("The onboarding steps could not be copied in this browser.", "error");
+    }
+  });
+  attachRoleAccountTableEvents();
+}
+
+function attachRoleAccountTableEvents() {
+  document.querySelectorAll("[data-role-edit]").forEach(button => button.addEventListener("click", () => openRoleAccountModal(button.dataset.roleEdit)));
+  document.querySelectorAll("[data-role-reset]").forEach(button => button.addEventListener("click", async () => {
+    const account = roleAccounts.find(item => item.uid === button.dataset.roleReset);
+    if (!account || !confirm(`Send a password reset email to ${account.email}?`)) return;
+    button.disabled = true;
+    const original = button.textContent;
+    button.textContent = "Sending…";
+    try {
+      await window.CivicRoleAccounts.sendPasswordReset(account.email);
+      showToast(`Password reset email sent to ${account.email}.`);
+    } catch (error) {
+      console.error("Password reset email failed.", error);
+      showToast(roleAccountErrorMessage(error), "error");
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }));
+}
+
+function openRoleAccountModal(uid) {
+  const account = roleAccounts.find(item => item.uid === uid);
+  if (!account || account.uid === authProfile()?.uid) {
+    showToast("You cannot change your own administrator role.", "error");
+    return;
+  }
+  document.getElementById("modalRoot").innerHTML = `<div id="modalBackdrop" class="modal-backdrop"><div class="modal role-account-modal" role="dialog" aria-modal="true" aria-labelledby="roleModalTitle">
+    <div class="modal-header"><div><p class="eyebrow">Verified access control</p><h2 id="roleModalTitle">Change role account</h2></div><button id="closeModal" class="icon-button" aria-label="Close">✕</button></div>
+    <div class="modal-summary"><strong>${escapeHtml(account.displayName)}</strong><span>${escapeHtml(account.email)}</span></div>
+    <div class="role-security-note"><span>✓</span><p><strong>Security check</strong>Verify the person's identity and department before granting official access. The change is recorded in the role audit trail.</p></div>
+    <label class="field-label"><span>Account role</span><select id="accountRole"><option value="citizen" ${account.role === "citizen" ? "selected" : ""}>Citizen</option><option value="department-officer" ${account.role === "department-officer" ? "selected" : ""}>Department Officer</option><option value="administrator" ${account.role === "administrator" ? "selected" : ""}>Administrator</option></select></label>
+    <label class="field-label"><span>Assigned department</span><select id="accountDepartment">${DEPARTMENTS.map(department => `<option ${department === account.department ? "selected" : ""}>${escapeHtml(department)}</option>`).join("")}</select><small id="departmentHelp">Required for department officers.</small></label>
+    <div class="button-row end"><button id="cancelModal" class="secondary-button">Cancel</button><button id="saveRoleAccount" class="primary-button">Save Role</button></div>
+  </div></div>`;
+  const close = () => { document.getElementById("modalRoot").innerHTML = ""; };
+  const role = document.getElementById("accountRole");
+  const department = document.getElementById("accountDepartment");
+  const help = document.getElementById("departmentHelp");
+  const syncDepartment = () => {
+    if (role.value === "citizen") {
+      department.disabled = true;
+      help.textContent = "Citizen accounts are not assigned to a department.";
+    } else if (role.value === "administrator") {
+      department.value = "General Administration";
+      department.disabled = true;
+      help.textContent = "Administrators receive municipal-wide access.";
+    } else {
+      department.disabled = false;
+      if (!DEPARTMENTS.includes(department.value)) department.value = DEPARTMENTS[0];
+      help.textContent = "The officer will see complaints assigned only to this department.";
+    }
+  };
+  syncDepartment();
+  role.addEventListener("change", syncDepartment);
+  document.getElementById("closeModal").addEventListener("click", close);
+  document.getElementById("cancelModal").addEventListener("click", close);
+  document.getElementById("modalBackdrop").addEventListener("click", event => { if (event.target.id === "modalBackdrop") close(); });
+  document.getElementById("saveRoleAccount").addEventListener("click", async event => {
+    const nextRole = role.value;
+    const nextDepartment = nextRole === "department-officer" ? department.value : "";
+    if (nextRole === "administrator" && !confirm(`Grant full administrator access to ${account.email}?`)) return;
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = "Saving securely…";
+    try {
+      await window.CivicRoleAccounts.updateRole(account.uid, nextRole, nextDepartment);
+      showToast(`${account.displayName} is now ${roleLabel(nextRole)}.`);
+      close();
+    } catch (error) {
+      console.error("Role account update failed.", error);
+      showToast(roleAccountErrorMessage(error), "error");
+      button.disabled = false;
+      button.textContent = "Save Role";
+    }
+  });
 }
 
 async function submitComplaint(event) {
@@ -742,6 +952,7 @@ document.addEventListener("civic-auth-changed", event => {
   trackingError = "";
   selectedComplaintId = null;
   activePage = "dashboard";
+  stopRoleAccountSync();
   if (event.detail.authenticated) startComplaintSync();
   else stopComplaintSync();
 });

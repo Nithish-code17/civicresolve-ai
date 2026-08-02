@@ -12,11 +12,13 @@ The project remains build-free and uses browser-native JavaScript modules for Fi
 - `assets/css/styles.css` contains the shared design system and responsive styles.
 - `assets/js/auth.js` owns Firebase sessions, user profiles and role permissions.
 - `assets/js/firestore-data.js` owns role-scoped complaint queries, writes, migration and real-time listeners.
+- `assets/js/role-accounts.js` owns administrator-only user listing, role changes, department assignment, password-reset handoff and role audit writes.
 - `assets/js/app.js` contains the current complaint workflow and role-aware user interface logic.
 - `assets/js/firebase-config.js` contains the Firebase Web App project configuration entry point.
 - Firestore stores authenticated user profiles, role assignments, complaints and status history.
 - LocalStorage is used only for explicit demo mode and one-time migration of eligible citizen-owned complaints.
 - `firestore.rules` prevents self-promotion, enforces complaint ownership and limits officer/admin mutations by role.
+- Signed-in clients watch their own profile document so verified role changes take effect without signing out or refreshing.
 
 This first restructuring commit changes file organisation only. It does not intentionally change complaint behaviour or stored data.
 
@@ -96,6 +98,18 @@ The complaint service stores complaints in Firestore and uses real-time role-sco
 - Official updates append immutable audit-history entries.
 - Citizen feedback is permitted only on owned resolved complaints.
 - Eligible LocalStorage citizen complaints can migrate once after sign-in.
+
+### Stage 5 — complete
+
+Role accounts are provisioned through a least-privilege workflow:
+
+- Every person first creates a normal Firebase account and receives the Citizen role.
+- Administrators can list user profiles but citizens and officers cannot enumerate users.
+- Administrators can promote verified profiles to Department Officer or Administrator.
+- Officer access requires one exact department assignment.
+- Administrators cannot change their own role from the browser.
+- Every role change writes an immutable `roleAudit` record containing the target, previous access, new access, actor and server timestamp.
+- The affected user's active session observes the profile change and immediately reloads the correct complaint scope.
 
 ## Development principles
 

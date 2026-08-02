@@ -18,7 +18,8 @@
     submit: [ROLES.CITIZEN],
     track: [ROLES.CITIZEN, ROLES.OFFICER, ROLES.ADMIN],
     admin: [ROLES.OFFICER, ROLES.ADMIN],
-    analytics: [ROLES.OFFICER, ROLES.ADMIN]
+    analytics: [ROLES.OFFICER, ROLES.ADMIN],
+    accounts: [ROLES.ADMIN]
   });
   const DEMO_PROFILES = Object.freeze({
     [ROLES.CITIZEN]: {
@@ -55,7 +56,8 @@
     auth: null,
     db: null,
     sdk: null,
-    pendingRegistrationProfile: null
+    pendingRegistrationProfile: null,
+    profileUnsubscribe: null
   };
 
   let resolveReady;
@@ -81,10 +83,11 @@
   }
 
   function normaliseProfile(profile, user) {
+    const displayName = String(profile?.displayName || user.displayName || user.email?.split("@")[0] || "CivicResolve User").trim();
     return {
       uid: user.uid,
       email: user.email || profile?.email || "",
-      displayName: profile?.displayName || user.displayName || user.email?.split("@")[0] || "CivicResolve User",
+      displayName: displayName.length >= 2 ? displayName : `${displayName || "CivicResolve"} User`,
       phone: profile?.phone || "",
       role: normaliseRole(profile?.role),
       department: profile?.department || ""
@@ -99,8 +102,23 @@
 
   function notifyChange() {
     document.dispatchEvent(new CustomEvent("civic-auth-changed", {
-      detail: { authenticated: Boolean(state.user), role: state.profile?.role || null }
+      detail: {
+        authenticated: Boolean(state.user),
+        uid: state.user?.uid || null,
+        role: state.profile?.role || null,
+        department: state.profile?.department || ""
+      }
     }));
+  }
+
+  function profileSignature(profile) {
+    if (!profile) return "";
+    return [profile.uid, profile.email, profile.displayName, profile.phone, profile.role, profile.department].join("|");
+  }
+
+  function stopProfileObserver() {
+    state.profileUnsubscribe?.();
+    state.profileUnsubscribe = null;
   }
 
   function setSession(user, profile) {
@@ -138,6 +156,21 @@
     return citizenProfile;
   }
 
+  function observeProfile(user) {
+    stopProfileObserver();
+    const { doc, onSnapshot } = state.sdk;
+    const profileRef = doc(state.db, "users", user.uid);
+    state.profileUnsubscribe = onSnapshot(profileRef, snapshot => {
+      if (!snapshot.exists()) return;
+      const nextProfile = normaliseProfile(snapshot.data(), user);
+      if (profileSignature(nextProfile) !== profileSignature(state.profile)) {
+        setSession(user, nextProfile);
+      }
+    }, error => {
+      console.error("The signed-in role profile stopped synchronising.", error);
+    });
+  }
+
   async function initialiseFirebase() {
     state.mode = "firebase";
     state.sdk = await loadFirebaseSdk();
@@ -149,6 +182,7 @@
     let firstAuthState = true;
     state.sdk.onAuthStateChanged(state.auth, async user => {
       if (!user) {
+        stopProfileObserver();
         setSession(null, null);
         if (firstAuthState) completeReady();
         firstAuthState = false;
@@ -157,8 +191,11 @@
 
       try {
         const profile = await getOrCreateProfile(user);
+        state.pendingRegistrationProfile = null;
         setSession(user, profile);
+        observeProfile(user);
       } catch (error) {
+        state.pendingRegistrationProfile = null;
         console.error("Unable to load the CivicResolve user profile.", error);
         // Fail closed to the least-privileged role when a profile cannot load.
         setSession(user, normaliseProfile({ role: ROLES.CITIZEN }, user));
@@ -219,7 +256,7 @@
           <p class="auth-subtitle">${isRegister ? "New accounts are securely created with the Citizen role." : "Use your registered email and password to continue."}</p>
           <div id="authMessage" class="auth-message hidden" role="alert"></div>
           <form id="authForm" class="auth-form" data-view="${view}">
-            ${isRegister ? `<label><span>Full name</span><input name="displayName" autocomplete="name" placeholder="Enter your full name" required></label><label><span>Phone number</span><input name="phone" autocomplete="tel" inputmode="numeric" pattern="[0-9]{10}" placeholder="10-digit mobile number" required></label>` : ""}
+            ${isRegister ? `<label><span>Full name</span><input name="displayName" autocomplete="name" minlength="2" maxlength="120" placeholder="Enter your full name" required></label><label><span>Phone number</span><input name="phone" autocomplete="tel" inputmode="numeric" pattern="[0-9]{10}" placeholder="10-digit mobile number" required></label>` : ""}
             <label><span>Email address</span><input name="email" type="email" autocomplete="email" placeholder="name@example.com" required></label>
             <label><span>Password</span><input name="password" type="password" autocomplete="${isRegister ? "new-password" : "current-password"}" minlength="6" placeholder="Minimum 6 characters" required></label>
             ${isRegister ? `<label><span>Confirm password</span><input name="confirmPassword" type="password" autocomplete="new-password" minlength="6" placeholder="Enter the password again" required></label>` : `<button type="button" id="forgotPassword" class="auth-link align-right">Forgot password?</button>`}
@@ -318,14 +355,9 @@
     try {
       const credential = await state.sdk.createUserWithEmailAndPassword(state.auth, data.email.trim(), data.password);
       await state.sdk.updateProfile(credential.user, { displayName: data.displayName.trim() });
-      const profile = normaliseProfile(state.pendingRegistrationProfile, credential.user);
-      await state.sdk.setDoc(state.sdk.doc(state.db, "users", credential.user.uid), {
-        ...profile,
-        createdAt: state.sdk.serverTimestamp(),
-        updatedAt: state.sdk.serverTimestamp()
-      });
-    } finally {
+    } catch (error) {
       state.pendingRegistrationProfile = null;
+      throw error;
     }
   }
 
@@ -385,7 +417,7 @@
     getProfile: () => state.profile,
     getRole: () => state.profile?.role || null,
     getRoleLabel: () => ROLE_LABELS[state.profile?.role] || "User",
-    getFirebaseServices: () => state.mode === "firebase" ? { db: state.db, sdk: state.sdk } : null,
+    getFirebaseServices: () => state.mode === "firebase" ? { auth: state.auth, db: state.db, sdk: state.sdk } : null,
     canAccess,
     canManageComplaint,
     canDeleteComplaint: () => state.profile?.role === ROLES.ADMIN,
