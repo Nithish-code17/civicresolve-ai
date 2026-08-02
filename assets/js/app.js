@@ -30,6 +30,9 @@ let roleAccounts = [];
 let roleAccountsReady = false;
 let roleAccountsError = "";
 let roleAccountsUnsubscribe = null;
+let selectedEvidenceFiles = [];
+let selectedEvidencePreviewUrls = [];
+let evidenceUploadWarning = "";
 
 function authProfile() { return window.CivicAuth?.getProfile() || null; }
 function currentRole() { return window.CivicAuth?.getRole() || "citizen"; }
@@ -228,7 +231,15 @@ function complaintConnectionError(error) {
   const messages = {
     "permission-denied": "Your account is signed in, but Firestore denied this complaint view. Check the account role and published security rules.",
     "unavailable": "Firestore is temporarily unavailable. Check your internet connection and try again.",
-    "failed-precondition": "Firestore needs an index for this complaint view. Review the Firebase console message and create the suggested index."
+    "failed-precondition": "Firestore needs an index for this complaint view. Review the Firebase console message and create the suggested index.",
+    "evidence/unauthorized": "Your signed-in role cannot access this complaint evidence.",
+    "evidence/unauthenticated": "Sign in again before accessing complaint evidence.",
+    "evidence/object-not-found": "This evidence file is no longer available.",
+    "evidence/provider-not-configured": "Evidence storage is being activated. The complaint is safe, but its files were not uploaded.",
+    "evidence/provider-upload-failed": "The evidence provider could not store this file. Check your connection and try again.",
+    "evidence/network-error": "The evidence service could not be reached. Check your connection and try again.",
+    "evidence/window-closed": "Evidence can be added only before department work begins.",
+    "evidence/too-many-files": "A complaint can contain a maximum of three evidence files."
   };
   return messages[error?.code] || error?.message || "The real-time complaint connection failed.";
 }
@@ -303,6 +314,7 @@ function navigate(page) {
     return;
   }
   activePage = page;
+  if (page !== "submit") clearSelectedEvidence();
   lastSubmitted = null;
   selectedComplaintId = null;
   trackingError = "";
@@ -385,7 +397,7 @@ function complaintTable(items, compact = false) {
   if (!items.length) return '<div class="empty-table">⌕<p>No complaints match the selected filters.</p></div>';
   return `<div class="table-scroll"><table class="data-table"><thead><tr><th>ID</th><th>Complaint</th><th>Category</th><th>Priority</th><th>Status</th>${compact ? "" : "<th>Actions</th>"}</tr></thead><tbody>${items.map(item => `<tr>
     <td><strong>${escapeHtml(item.id)}</strong><span class="table-subtext">${formatDate(item.createdAt)}</span></td>
-    <td><strong>${escapeHtml(item.title)}</strong><span class="table-subtext">${escapeHtml(item.location)}</span></td>
+    <td><strong>${escapeHtml(item.title)}</strong><span class="table-subtext">${escapeHtml(item.location)}${item.evidence?.length ? ` · ${item.evidence.length} evidence file${item.evidence.length === 1 ? "" : "s"}` : ""}</span></td>
     <td>${escapeHtml(item.category)}</td><td>${priorityBadge(item.priority)}</td><td>${statusBadge(item.status)}</td>
     ${compact ? "" : `<td><div class="table-actions">${window.CivicAuth.canManageComplaint(item) ? `<button class="table-button" data-manage="${item.id}">Manage</button>` : ""}${window.CivicAuth.canDeleteComplaint() ? `<button class="delete-button" data-delete="${item.id}" title="Delete complaint">×</button>` : ""}</div></td>`}
   </tr>`).join("")}</tbody></table></div>`;
@@ -405,6 +417,7 @@ function renderSubmitPage() {
       ${field("Complaint title", "title", "Example: Streetlight not working", true)}
       <label class="field-label"><span>Detailed description</span><textarea id="description" name="description" placeholder="Describe the problem, how long it has existed and whether it creates danger." required minlength="15" rows="6"></textarea></label>
       ${field("Location / landmark", "location", "Example: Near Gandhipuram Bus Stand", true)}
+      ${renderInitialEvidenceUploader()}
       <div class="form-note">✓ This complaint will be securely linked to your signed-in citizen account.</div>
       <button class="primary-button full-width" type="submit">✦ Analyse and Submit Complaint</button>
     </form>
@@ -414,6 +427,85 @@ function renderSubmitPage() {
 
 function field(label, name, placeholder, required = false, type = "text", extra = "") {
   return `<label class="field-label"><span>${label}</span><input id="${name}" name="${name}" type="${type}" placeholder="${placeholder}" ${required ? "required" : ""} ${extra}></label>`;
+}
+
+function renderInitialEvidenceUploader() {
+  return `<section class="evidence-field" aria-labelledby="evidenceLabel">
+    <div class="evidence-field-heading"><div><strong id="evidenceLabel">Photo or document evidence <span>Optional</span></strong><small>Up to 3 JPG, PNG, WebP, or PDF files · 5 MB each</small></div><span class="secure-file-badge">▣ Secure upload</span></div>
+    <label id="evidenceDropZone" class="evidence-dropzone" for="evidenceFiles" tabindex="0">
+      <input id="evidenceFiles" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple hidden>
+      <span class="evidence-upload-icon">⇧</span><span><strong>Drop evidence here or browse files</strong><small>Clear photos and supporting documents help departments verify the issue.</small></span>
+    </label>
+    <div id="evidenceSelection" class="evidence-selection"></div>
+  </section>`;
+}
+
+function formatFileSize(bytes = 0) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function clearSelectedEvidence() {
+  selectedEvidencePreviewUrls.forEach(url => URL.revokeObjectURL(url));
+  selectedEvidencePreviewUrls = [];
+  selectedEvidenceFiles = [];
+}
+
+function selectedEvidenceMarkup() {
+  selectedEvidencePreviewUrls.forEach(url => URL.revokeObjectURL(url));
+  selectedEvidencePreviewUrls = [];
+  if (!selectedEvidenceFiles.length) return "";
+  return `<div class="selected-evidence-grid">${selectedEvidenceFiles.map((file, index) => {
+    const isImage = file.type.startsWith("image/");
+    const previewUrl = isImage ? URL.createObjectURL(file) : "";
+    if (previewUrl) selectedEvidencePreviewUrls.push(previewUrl);
+    return `<article class="selected-evidence-card">${isImage ? `<img src="${previewUrl}" alt="Selected evidence preview">` : '<span class="pdf-evidence-icon">PDF</span>'}<div><strong>${escapeHtml(file.name)}</strong><small>${formatFileSize(file.size)}</small></div><button type="button" data-remove-evidence="${index}" aria-label="Remove ${escapeHtml(file.name)}">×</button></article>`;
+  }).join("")}</div>`;
+}
+
+function refreshSelectedEvidence() {
+  const root = document.getElementById("evidenceSelection");
+  if (!root) return;
+  root.innerHTML = selectedEvidenceMarkup();
+  root.querySelectorAll("[data-remove-evidence]").forEach(button => button.addEventListener("click", () => {
+    selectedEvidenceFiles.splice(Number(button.dataset.removeEvidence), 1);
+    refreshSelectedEvidence();
+  }));
+}
+
+function setSelectedEvidence(fileList) {
+  try {
+    selectedEvidenceFiles = window.CivicEvidence.validateFiles(fileList);
+    refreshSelectedEvidence();
+  } catch (error) {
+    clearSelectedEvidence();
+    refreshSelectedEvidence();
+    showToast(complaintConnectionError(error), "error");
+  }
+}
+
+function attachInitialEvidenceEvents() {
+  const input = document.getElementById("evidenceFiles");
+  const dropZone = document.getElementById("evidenceDropZone");
+  if (!input || !dropZone) return;
+  input.addEventListener("change", () => setSelectedEvidence(input.files));
+  dropZone.addEventListener("keydown", event => {
+    if (["Enter", " "].includes(event.key)) {
+      event.preventDefault();
+      input.click();
+    }
+  });
+  ["dragenter", "dragover"].forEach(name => dropZone.addEventListener(name, event => {
+    event.preventDefault();
+    dropZone.classList.add("drag-active");
+  }));
+  ["dragleave", "drop"].forEach(name => dropZone.addEventListener(name, event => {
+    event.preventDefault();
+    dropZone.classList.remove("drag-active");
+  }));
+  dropZone.addEventListener("drop", event => setSelectedEvidence(event.dataTransfer.files));
+  refreshSelectedEvidence();
 }
 
 function renderEmptyAnalysis() {
@@ -444,8 +536,9 @@ function smartAdvice(category, priority) {
 
 function renderSubmissionSuccess(item) {
   return `<div class="success-page"><div class="success-icon">✓</div><p class="eyebrow">Complaint registered successfully</p><h2>${item.id}</h2><p>Save this grievance ID. It is required to track the complaint.</p>
-    <div class="result-card">${resultRow("Category", item.category)}${resultRow("Department", item.department)}${resultRow("Priority", item.priority)}${resultRow("Expected resolution", formatDate(item.expectedResolutionDate))}</div>
+    <div class="result-card">${resultRow("Category", item.category)}${resultRow("Department", item.department)}${resultRow("Priority", item.priority)}${resultRow("Evidence", `${item.evidence?.length || 0} file${item.evidence?.length === 1 ? "" : "s"}`)}${resultRow("Expected resolution", formatDate(item.expectedResolutionDate))}</div>
     ${item.duplicateId ? `<div class="alert warning">⚠ <span>A similar unresolved complaint may already exist: <strong>${item.duplicateId}</strong>.</span></div>` : ""}
+    ${evidenceUploadWarning ? `<div class="alert warning evidence-warning">⚠ <span><strong>Complaint saved without evidence.</strong> ${escapeHtml(evidenceUploadWarning)} You can add the files later from Track Complaint while the case is awaiting review.</span></div>` : ""}
     <div class="button-row center"><button class="primary-button" data-success-go="track">⌕ Track Complaint</button><button class="secondary-button" id="submitAnother">Submit Another</button></div></div>`;
 }
 
@@ -470,6 +563,7 @@ function renderTrackingResult(item) {
       ${detailCard("◉", "Citizen", item.citizenName)}${detailCard("⌖", "Location", item.location)}${detailCard("▤", "Department", item.department)}${detailCard("◷", "Expected resolution", formatDate(item.expectedResolutionDate))}
     </div>
     <div class="description-block"><strong>Complaint description</strong><p>${escapeHtml(item.description)}</p></div>
+    ${renderEvidenceSection(item)}
     <div class="timeline-card"><h3>Status timeline</h3><div class="timeline">${STATUS_FLOW.map((status, index) => `<div class="timeline-step ${index <= currentIndex ? "complete" : ""} ${index === currentIndex ? "current" : ""}"><div class="timeline-marker">${index <= currentIndex ? "✓" : "○"}</div><span>${status}</span></div>`).join("")}</div></div>
     ${renderStatusHistory(item)}
     ${item.resolutionNote ? `<div class="resolution-note">✓<div><strong>Department update</strong><p>${escapeHtml(item.resolutionNote)}</p></div></div>` : ""}
@@ -486,6 +580,92 @@ function renderStatusHistory(item) {
 }
 
 function detailCard(icon, label, value) { return `<article class="detail-card"><span class="detail-icon">${icon}</span><div><span>${label}</span><strong>${escapeHtml(value)}</strong></div></article>`; }
+
+function canAddEvidence(item) {
+  return isCitizen()
+    && window.CivicAuth.ownsComplaint(item)
+    && ["Submitted", "Under Review"].includes(item.status)
+    && (item.evidence?.length || 0) < window.CivicEvidence.MAX_FILES;
+}
+
+function renderEvidenceSection(item, includeCitizenUpload = true) {
+  const evidence = Array.isArray(item.evidence) ? item.evidence : [];
+  const remaining = Math.max(0, window.CivicEvidence.MAX_FILES - evidence.length);
+  const cards = evidence.length
+    ? `<div class="evidence-grid">${evidence.map((file, index) => `<article class="evidence-card"><span class="evidence-type-icon ${window.CivicEvidence.isImage(file) ? "image-file" : "pdf-file"}">${window.CivicEvidence.isImage(file) ? "▧" : "PDF"}</span><div><strong>${escapeHtml(file.originalName)}</strong><small>${formatFileSize(file.size)} · Uploaded ${formatDate(file.uploadedAt)}</small></div><button type="button" class="table-button" data-evidence-index="${index}">View file</button></article>`).join("")}</div>`
+    : '<div class="empty-evidence">No photo or document evidence was attached.</div>';
+  const addFiles = includeCitizenUpload && canAddEvidence(item)
+    ? `<div class="additional-evidence"><div><strong>Add supporting evidence</strong><small>${remaining} file slot${remaining === 1 ? "" : "s"} remaining · Added files cannot be edited after department work begins.</small></div><div class="additional-evidence-actions"><input id="additionalEvidenceFiles" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple><button id="uploadAdditionalEvidence" type="button" class="secondary-button small" disabled>Upload evidence</button></div><div id="additionalEvidenceStatus" class="evidence-upload-status"></div></div>`
+    : "";
+  return `<section class="complaint-evidence"><div class="complaint-evidence-heading"><div><h3>Complaint evidence</h3><p>Files are protected by complaint ownership and department access.</p></div><span>${evidence.length}/${window.CivicEvidence.MAX_FILES} files</span></div>${cards}${addFiles}</section>`;
+}
+
+function attachEvidenceOpenEvents(root, item) {
+  root?.querySelectorAll("[data-evidence-index]").forEach(button => button.addEventListener("click", async () => {
+    const evidence = item.evidence?.[Number(button.dataset.evidenceIndex)];
+    if (!evidence) return;
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = "Opening…";
+    try {
+      await window.CivicEvidence.open(evidence);
+      button.disabled = false;
+      button.textContent = original;
+    } catch (error) {
+      console.error("Evidence file could not be opened.", error);
+      showToast(complaintConnectionError(error), "error");
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }));
+}
+
+function attachAdditionalEvidenceEvents(item) {
+  if (!canAddEvidence(item)) return;
+  const input = document.getElementById("additionalEvidenceFiles");
+  const button = document.getElementById("uploadAdditionalEvidence");
+  const status = document.getElementById("additionalEvidenceStatus");
+  if (!input || !button || !status) return;
+  let files = [];
+  input.addEventListener("change", () => {
+    try {
+      files = window.CivicEvidence.validateFiles(input.files, item.evidence?.length || 0);
+      status.textContent = `${files.length} file${files.length === 1 ? "" : "s"} ready · ${formatFileSize(files.reduce((sum, file) => sum + file.size, 0))}`;
+      status.dataset.tone = "ready";
+      button.disabled = false;
+    } catch (error) {
+      files = [];
+      status.textContent = complaintConnectionError(error);
+      status.dataset.tone = "error";
+      button.disabled = true;
+    }
+  });
+  button.addEventListener("click", async () => {
+    if (!files.length) return;
+    button.disabled = true;
+    const original = button.textContent;
+    let uploaded = [];
+    try {
+      uploaded = await window.CivicEvidence.upload(item.id, files, item.evidence?.length || 0, percent => {
+        button.textContent = `Uploading ${percent}%`;
+      });
+      const combined = await window.CivicComplaints.attachEvidence(item.id, uploaded);
+      trackingResult = { ...item, evidence: combined };
+      showToast(`${uploaded.length} evidence file${uploaded.length === 1 ? "" : "s"} uploaded securely.`);
+      document.getElementById("trackResult").innerHTML = renderTrackingResult(trackingResult);
+      attachTrackingEvents();
+    } catch (error) {
+      if (uploaded.length) {
+        try { await window.CivicEvidence.removeMany(uploaded); } catch (cleanupError) { console.warn("Uploaded evidence cleanup failed.", cleanupError); }
+      }
+      console.error("Additional evidence upload failed.", error);
+      status.textContent = complaintConnectionError(error);
+      status.dataset.tone = "error";
+      button.disabled = false;
+      button.textContent = original;
+    }
+  });
+}
 
 function renderFeedback(item) {
   const rating = item.rating || 5;
@@ -622,7 +802,7 @@ function attachPageEvents() {
   if (activePage === "submit") {
     if (lastSubmitted) {
       document.querySelector("[data-success-go]")?.addEventListener("click", () => { trackingResult = lastSubmitted; navigate("track"); });
-      document.getElementById("submitAnother")?.addEventListener("click", () => { lastSubmitted = null; renderApp(); });
+      document.getElementById("submitAnother")?.addEventListener("click", () => { lastSubmitted = null; evidenceUploadWarning = ""; clearSelectedEvidence(); renderApp(); });
       return;
     }
     const title = document.getElementById("title");
@@ -633,6 +813,7 @@ function attachPageEvents() {
     };
     title.addEventListener("input", updateAnalysis);
     description.addEventListener("input", updateAnalysis);
+    attachInitialEvidenceEvents();
     document.getElementById("complaintForm").addEventListener("submit", submitComplaint);
   }
 
@@ -786,10 +967,11 @@ async function submitComplaint(event) {
   const today = new Date().toISOString().slice(0, 10);
   const submitButton = event.currentTarget.querySelector('[type="submit"]');
   const originalLabel = submitButton.textContent;
+  const files = [...selectedEvidenceFiles];
   submitButton.disabled = true;
   submitButton.textContent = "Submitting securely…";
   try {
-    const complaint = await window.CivicComplaints.create({
+    let complaint = await window.CivicComplaints.create({
       ...data,
       category: analysis.category,
       department: analysis.department,
@@ -797,8 +979,28 @@ async function submitComplaint(event) {
       expectedResolutionDate: addDays(today, analysis.days),
       duplicateId: duplicate?.id || ""
     });
+    evidenceUploadWarning = "";
+    if (files.length) {
+      let uploaded = [];
+      try {
+        uploaded = await window.CivicEvidence.upload(complaint.id, files, 0, percent => {
+          submitButton.textContent = `Uploading evidence ${percent}%`;
+        });
+        const evidence = await window.CivicComplaints.attachEvidence(complaint.id, uploaded);
+        complaint = { ...complaint, evidence };
+      } catch (error) {
+        if (uploaded.length) {
+          try { await window.CivicEvidence.removeMany(uploaded); } catch (cleanupError) { console.warn("Uploaded evidence cleanup failed.", cleanupError); }
+        }
+        console.error("Complaint evidence upload failed.", error);
+        evidenceUploadWarning = complaintConnectionError(error);
+      }
+    }
+    clearSelectedEvidence();
     lastSubmitted = complaint;
-    showToast(`Complaint ${complaint.id} submitted successfully.`);
+    showToast(evidenceUploadWarning
+      ? `Complaint ${complaint.id} was saved. Evidence needs attention.`
+      : `Complaint ${complaint.id} submitted successfully.`, evidenceUploadWarning ? "error" : "success");
     renderApp();
   } catch (error) {
     console.error("Complaint submission failed.", error);
@@ -809,7 +1011,11 @@ async function submitComplaint(event) {
 }
 
 function attachTrackingEvents() {
-  if (!trackingResult || !isCitizen() || !window.CivicAuth.ownsComplaint(trackingResult)) return;
+  if (!trackingResult) return;
+  const root = document.getElementById("trackResult");
+  attachEvidenceOpenEvents(root, trackingResult);
+  attachAdditionalEvidenceEvents(trackingResult);
+  if (!isCitizen() || !window.CivicAuth.ownsComplaint(trackingResult)) return;
   let currentRating = trackingResult?.rating || 5;
   document.querySelectorAll("[data-rating]").forEach(button => button.addEventListener("click", () => {
     currentRating = Number(button.dataset.rating);
@@ -901,6 +1107,7 @@ function openManageModal(id) {
   document.getElementById("modalRoot").innerHTML = `<div id="modalBackdrop" class="modal-backdrop"><div class="modal">
     <div class="modal-header"><div><p class="eyebrow">${item.id}</p><h2>Update complaint</h2></div><button id="closeModal" class="icon-button">✕</button></div>
     <div class="modal-summary"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.location)}</span></div>
+    ${renderEvidenceSection(item, false)}
     <label class="field-label"><span>Status</span><select id="modalStatus">${STATUS_FLOW.map(status => `<option ${status === item.status ? "selected" : ""}>${status}</option>`).join("")}</select></label>
     <label class="field-label"><span>Priority ${isOfficer() ? "(administrator controlled)" : ""}</span><select id="modalPriority" ${adminOnly}>${["High","Medium","Low"].map(priority => `<option ${priority === item.priority ? "selected" : ""}>${priority}</option>`).join("")}</select></label>
     <label class="field-label"><span>Assigned department ${isOfficer() ? "(fixed to your department)" : ""}</span><select id="modalDepartment" ${adminOnly}>${DEPARTMENTS.map(department => `<option ${department === item.department ? "selected" : ""}>${escapeHtml(department)}</option>`).join("")}</select></label>
@@ -908,6 +1115,7 @@ function openManageModal(id) {
     <div class="button-row end"><button id="cancelModal" class="secondary-button">Cancel</button><button id="saveModal" class="primary-button">Save Changes</button></div>
   </div></div>`;
   const close = () => { document.getElementById("modalRoot").innerHTML = ""; selectedComplaintId = null; };
+  attachEvidenceOpenEvents(document.getElementById("modalRoot"), item);
   document.getElementById("closeModal").addEventListener("click", close);
   document.getElementById("cancelModal").addEventListener("click", close);
   document.getElementById("modalBackdrop").addEventListener("click", event => { if (event.target.id === "modalBackdrop") close(); });
@@ -947,6 +1155,8 @@ window.CivicAuth.ready().then(() => {
 });
 
 document.addEventListener("civic-auth-changed", event => {
+  clearSelectedEvidence();
+  evidenceUploadWarning = "";
   lastSubmitted = null;
   trackingResult = null;
   trackingError = "";

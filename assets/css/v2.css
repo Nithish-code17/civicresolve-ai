@@ -42,6 +42,30 @@ html { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 body { color: var(--v2-text); background: var(--v2-bg); transition: background .2s ease, color .2s ease; }
 
+.v2-shell .evidence-field,
+.v2-shell .complaint-evidence { color:var(--v2-text); border-color:var(--v2-line); background:var(--v2-soft); }
+.v2-shell .evidence-dropzone,
+.v2-shell .selected-evidence-card,
+.v2-shell .evidence-card,
+.v2-shell .empty-evidence { color:var(--v2-text); border-color:var(--v2-line); background:var(--v2-surface); }
+.v2-shell .evidence-field-heading strong,
+.v2-shell .evidence-dropzone strong,
+.v2-shell .selected-evidence-card strong,
+.v2-shell .evidence-card strong { color:var(--v2-text); }
+.v2-shell .evidence-field-heading small,
+.v2-shell .evidence-dropzone small,
+.v2-shell .selected-evidence-card small,
+.v2-shell .evidence-card small,
+.v2-shell .complaint-evidence-heading p,
+.v2-shell .empty-evidence { color:var(--v2-muted); }
+.v2-shell .secure-file-badge,
+.v2-shell .complaint-evidence-heading > span,
+.v2-shell .evidence-upload-icon,
+.v2-shell .evidence-type-icon.image-file { color:var(--v2-primary); background:var(--v2-primary-soft); }
+.v2-shell .evidence-dropzone:hover,
+.v2-shell .evidence-dropzone:focus-visible,
+.v2-shell .evidence-dropzone.drag-active { border-color:var(--v2-primary); background:var(--v2-primary-soft); }
+
 .v2-shell .sidebar {
   width: 282px;
   padding: 22px 18px;

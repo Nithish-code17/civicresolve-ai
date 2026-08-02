@@ -99,14 +99,78 @@ service cloud.firestore {
     }
 
     function complaintFieldsAreComplete(data) {
-      let fields = [
+      let required = [
         'id', 'citizenName', 'email', 'phone', 'title', 'description',
         'location', 'category', 'department', 'priority', 'status',
         'expectedResolutionDate', 'resolutionNote', 'rating', 'feedback',
         'duplicateId', 'createdByUid', 'createdByEmail', 'createdAt',
         'updatedAt', 'statusHistory'
       ];
-      return data.keys().hasAll(fields) && data.keys().hasOnly(fields);
+      let permitted = required.concat(['evidence']);
+      return data.keys().hasAll(required) && data.keys().hasOnly(permitted);
+    }
+
+    function evidenceItemIsValid(item, complaintId, ownerUid) {
+      return item is map
+        && item.keys().hasAll([
+          'provider', 'complaintId', 'assetId', 'publicId',
+          'resourceType', 'deliveryType', 'format', 'originalName',
+          'contentType', 'size', 'uploadedAt', 'uploadedByUid'
+        ])
+        && item.keys().hasOnly([
+          'provider', 'complaintId', 'assetId', 'publicId',
+          'resourceType', 'deliveryType', 'format', 'originalName',
+          'contentType', 'size', 'uploadedAt', 'uploadedByUid'
+        ])
+        && item.provider == 'cloudinary'
+        && item.complaintId == complaintId
+        && item.assetId is string
+        && item.assetId.size() >= 1
+        && item.assetId.size() <= 120
+        && item.publicId is string
+        && item.publicId.matches(
+          'civicresolve/complaint-evidence/' + complaintId + '/' + ownerUid
+            + '/evidence-[1-3]([.]pdf)?'
+        )
+        && item.publicId.size() <= 240
+        && item.resourceType in ['image', 'raw']
+        && item.deliveryType == 'authenticated'
+        && item.format in ['jpg', 'jpeg', 'png', 'webp', 'pdf']
+        && item.originalName is string
+        && item.originalName.size() >= 1
+        && item.originalName.size() <= 150
+        && item.contentType in [
+          'image/jpeg', 'image/png', 'image/webp', 'application/pdf'
+        ]
+        && item.size is int
+        && item.size > 0
+        && item.size <= 5 * 1024 * 1024
+        && item.uploadedAt is timestamp
+        && item.uploadedByUid == ownerUid
+        && (
+          (item.contentType == 'image/jpeg'
+            && item.resourceType == 'image'
+            && item.format in ['jpg', 'jpeg'])
+          || (item.contentType == 'image/png'
+            && item.resourceType == 'image'
+            && item.format == 'png')
+          || (item.contentType == 'image/webp'
+            && item.resourceType == 'image'
+            && item.format == 'webp')
+          || (item.contentType == 'application/pdf'
+            && item.resourceType == 'raw'
+            && item.format == 'pdf')
+        );
+    }
+
+    function evidenceIsValid(data, complaintId) {
+      let present = 'evidence' in data;
+      let items = present ? data.evidence : [];
+      return items is list
+        && items.size() <= 3
+        && (items.size() < 1 || evidenceItemIsValid(items[0], complaintId, data.createdByUid))
+        && (items.size() < 2 || evidenceItemIsValid(items[1], complaintId, data.createdByUid))
+        && (items.size() < 3 || evidenceItemIsValid(items[2], complaintId, data.createdByUid));
     }
 
     function complaintFieldsHaveValidTypes(data, complaintId) {
@@ -154,7 +218,8 @@ service cloud.firestore {
         && data.updatedAt is timestamp
         && data.statusHistory is list
         && data.statusHistory.size() >= 1
-        && data.statusHistory.size() <= 100;
+        && data.statusHistory.size() <= 100
+        && evidenceIsValid(data, complaintId);
     }
 
     function initialHistoryIsValid(data) {
@@ -182,6 +247,24 @@ service cloud.firestore {
         && entry.changedByUid == request.auth.uid
         && entry.changedByName is string
         && entry.changedByRole == currentUser().data.role;
+    }
+
+    function citizenEvidenceAppendIsValid(complaintId) {
+      let previous = 'evidence' in resource.data ? resource.data.evidence : [];
+      let next = request.resource.data.evidence;
+      return resource.data.status in ['Submitted', 'Under Review']
+        && next is list
+        && next.size() > previous.size()
+        && next.size() <= 3
+        && next.hasAll(previous)
+        && evidenceIsValid(request.resource.data, complaintId)
+        && request.resource.data.createdByUid == resource.data.createdByUid
+        && request.resource.data.createdByEmail == resource.data.createdByEmail
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['evidence', 'updatedAt']);
     }
 
     match /users/{userId} {
@@ -260,6 +343,8 @@ service cloud.firestore {
         && request.resource.data.resolutionNote == ''
         && request.resource.data.rating == null
         && request.resource.data.feedback == ''
+        && request.resource.data.evidence is list
+        && request.resource.data.evidence.size() == 0
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time
         && initialHistoryIsValid(request.resource.data);
@@ -288,6 +373,8 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['status', 'resolutionNote', 'updatedAt', 'statusHistory'])
           && historyAppendIsValid())
+        || (ownsComplaint(resource.data)
+          && citizenEvidenceAppendIsValid(complaintId))
         || (ownsComplaint(resource.data)
           && resource.data.status == 'Resolved'
           && complaintFieldsAreComplete(request.resource.data)

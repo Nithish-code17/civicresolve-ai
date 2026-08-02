@@ -51,7 +51,7 @@
 
 ## Phase 5 — Evidence and location
 
-- Upload complaint and resolution evidence to Firebase Storage
+- Upload complaint evidence to authenticated Cloudinary assets through Firebase-authorized Vercel Functions
 - Validate image and document files
 - Add map-based location selection
 - Store address, latitude and longitude

@@ -82,12 +82,16 @@
     const history = Array.isArray(data.statusHistory) && data.statusHistory.length
       ? data.statusHistory.map(entry => ({ ...entry, changedAt: dateValue(entry.changedAt, true) }))
       : defaultHistory(data);
+    const evidence = Array.isArray(data.evidence)
+      ? data.evidence.map(item => ({ ...item, uploadedAt: dateValue(item.uploadedAt, true) }))
+      : [];
     return {
       ...data,
       id: data.id || documentId,
       createdAt: dateValue(data.createdAt),
       updatedAt: dateValue(data.updatedAt, true),
-      statusHistory: history
+      statusHistory: history,
+      evidence
     };
   }
 
@@ -195,6 +199,7 @@
         resolutionNote: "",
         rating: null,
         feedback: "",
+        evidence: [],
         createdByUid: current.uid,
         createdByEmail: current.email,
         createdAt: today,
@@ -225,6 +230,7 @@
       resolutionNote: "",
       rating: null,
       feedback: "",
+      evidence: [],
       duplicateId: String(input.duplicateId || ""),
       createdByUid: current.uid,
       createdByEmail: current.email,
@@ -234,6 +240,40 @@
     };
     await sdk.setDoc(sdk.doc(db, "complaints", id), data);
     return normaliseComplaint({ ...data, createdAt: today, updatedAt: new Date().toISOString() }, id);
+  }
+
+  async function attachEvidence(id, evidenceItems) {
+    const current = profile();
+    if (!current || current.role !== "citizen") throw new Error("Only the complaint owner can add evidence.");
+    const additions = Array.isArray(evidenceItems) ? evidenceItems : [];
+    if (!additions.length) throw new Error("No evidence files were uploaded.");
+
+    if (isDemoMode()) {
+      const item = loadLocalComplaints().find(complaint => complaint.id === id);
+      if (!item || !window.CivicAuth.ownsComplaint(item)) throw new Error("This complaint is outside your account.");
+      if (!["Submitted", "Under Review"].includes(item.status)) throw new Error("Evidence can be added only before department work begins.");
+      const combined = [...(item.evidence || []), ...additions];
+      if (combined.length > 3) throw new Error("A complaint can contain a maximum of three evidence files.");
+      item.evidence = combined;
+      item.updatedAt = new Date().toISOString();
+      saveLocalComplaints();
+      return clone(item.evidence);
+    }
+
+    const { db, sdk } = firebaseServices();
+    const complaintRef = sdk.doc(db, "complaints", id);
+    const snapshot = await sdk.getDoc(complaintRef);
+    if (!snapshot.exists()) throw new Error("The complaint no longer exists.");
+    const existing = snapshot.data();
+    if (existing.createdByUid !== current.uid) throw new Error("This complaint is outside your account.");
+    if (!["Submitted", "Under Review"].includes(existing.status)) throw new Error("Evidence can be added only before department work begins.");
+    const combined = [...(Array.isArray(existing.evidence) ? existing.evidence : []), ...additions];
+    if (combined.length > 3) throw new Error("A complaint can contain a maximum of three evidence files.");
+    await sdk.updateDoc(complaintRef, {
+      evidence: combined,
+      updatedAt: sdk.serverTimestamp()
+    });
+    return combined;
   }
 
   async function updateOfficial(id, changes) {
@@ -310,7 +350,12 @@
       return;
     }
     const { db, sdk } = firebaseServices();
-    await sdk.deleteDoc(sdk.doc(db, "complaints", id));
+    const complaintRef = sdk.doc(db, "complaints", id);
+    const snapshot = await sdk.getDoc(complaintRef);
+    if (!snapshot.exists()) return;
+    const evidence = Array.isArray(snapshot.data().evidence) ? snapshot.data().evidence : [];
+    if (evidence.length) await window.CivicEvidence.removeMany(evidence);
+    await sdk.deleteDoc(complaintRef);
   }
 
   function resetDemoData() {
@@ -357,6 +402,7 @@
   window.CivicComplaints = Object.freeze({
     subscribe,
     create: createComplaint,
+    attachEvidence,
     updateOfficial,
     saveFeedback,
     delete: deleteComplaint,
