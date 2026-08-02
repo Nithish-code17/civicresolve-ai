@@ -6,12 +6,16 @@ Version 2 improves the stable MVP without changing the protected `main` branch. 
 
 ## Current architecture
 
-The project remains dependency-free during the first enhancement stage:
+The project remains build-free and uses browser-native JavaScript modules for Firebase:
 
 - `index.html` provides the application entry point.
 - `assets/css/styles.css` contains the shared design system and responsive styles.
-- `assets/js/app.js` contains the current complaint workflow and user interface logic.
+- `assets/js/auth.js` owns Firebase sessions, user profiles and role permissions.
+- `assets/js/app.js` contains the current complaint workflow and role-aware user interface logic.
+- `assets/js/firebase-config.js` contains the Firebase Web App project configuration entry point.
 - Browser LocalStorage remains the active data layer until Firebase migration begins.
+- Firestore stores authenticated user profiles and role assignments once Firebase is configured.
+- `firestore.rules` prevents self-promotion and defines complaint access for the next migration phase.
 
 This first restructuring commit changes file organisation only. It does not intentionally change complaint behaviour or stored data.
 
@@ -72,13 +76,13 @@ assets/js/
 
 Browser LocalStorage is retained to protect the working MVP while the UI and code structure are improved.
 
-### Stage 2
+### Stage 2 — in progress
 
-Firebase Authentication, Firestore and Storage will replace the temporary browser-only data layer.
+Firebase Authentication and Firestore user profiles now replace anonymous access. LocalStorage remains the temporary complaint data layer; Firestore and Storage will replace it during the cloud-data and evidence phases.
 
-### Stage 3
+### Stage 3 — foundation complete
 
-Firestore security rules and role-based access will restrict data according to citizen, officer and administrator roles.
+Interface guards and Firestore security rules restrict access according to citizen, officer and administrator roles. These complaint rules become active when the complaint service migrates to Firestore.
 
 ## Development principles
 

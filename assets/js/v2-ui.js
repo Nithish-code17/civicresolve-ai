@@ -13,6 +13,7 @@
   }
 
   function openGlobalSearch() {
+    if (!window.CivicAuth?.canAccess("admin")) return;
     const modal = document.createElement("div");
     modal.className = "v2-command-backdrop";
     modal.innerHTML = `
@@ -53,15 +54,16 @@
     const topbar = document.querySelector(".topbar");
     const adminChip = document.querySelector(".admin-chip");
     if (topbar && adminChip && !document.getElementById("v2Toolbar")) {
+      const canSearchComplaints = window.CivicAuth?.canAccess("admin");
       const toolbar = document.createElement("div");
       toolbar.id = "v2Toolbar";
       toolbar.className = "v2-toolbar";
       toolbar.innerHTML = `
-        <button type="button" id="v2GlobalSearch" class="v2-search-trigger"><span>⌕</span><span>Search complaints</span><kbd>Ctrl K</kbd></button>
+        ${canSearchComplaints ? '<button type="button" id="v2GlobalSearch" class="v2-search-trigger"><span>⌕</span><span>Search complaints</span><kbd>Ctrl K</kbd></button>' : ""}
         <button type="button" id="v2ThemeToggle" class="v2-icon-button" aria-label="Toggle colour theme"></button>
         <button type="button" class="v2-icon-button v2-notification" aria-label="Notifications">♢<i></i></button>`;
       topbar.insertBefore(toolbar, adminChip);
-      toolbar.querySelector("#v2GlobalSearch").addEventListener("click", openGlobalSearch);
+      toolbar.querySelector("#v2GlobalSearch")?.addEventListener("click", openGlobalSearch);
       toolbar.querySelector("#v2ThemeToggle").addEventListener("click", () => {
         applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
       });
@@ -81,7 +83,7 @@
   document.addEventListener("keydown", event => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
-      if (!document.querySelector(".v2-command-backdrop")) openGlobalSearch();
+      if (window.CivicAuth?.canAccess("admin") && !document.querySelector(".v2-command-backdrop")) openGlobalSearch();
     }
   });
 

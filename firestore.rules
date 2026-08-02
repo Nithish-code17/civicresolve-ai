@@ -1,0 +1,83 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function currentUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function hasRole(role) {
+      return signedIn() && currentUser().data.role == role;
+    }
+
+    function isAdministrator() {
+      return hasRole('administrator');
+    }
+
+    function isDepartmentOfficer() {
+      return hasRole('department-officer');
+    }
+
+    function ownsComplaint(data) {
+      return signedIn() && data.createdByUid == request.auth.uid;
+    }
+
+    function isAssignedDepartment(data) {
+      return isDepartmentOfficer()
+        && currentUser().data.department is string
+        && currentUser().data.department == data.department;
+    }
+
+    match /users/{userId} {
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId
+        && request.resource.data.role == 'citizen'
+        && request.resource.data.department == '';
+
+      allow read: if signedIn() && (request.auth.uid == userId || isAdministrator());
+
+      allow update: if isAdministrator()
+        || (signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.department == resource.data.department
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['displayName', 'phone', 'updatedAt']));
+
+      allow delete: if isAdministrator();
+    }
+
+    // These rules are ready for the Phase 4 Firestore complaint migration.
+    match /complaints/{complaintId} {
+      allow create: if hasRole('citizen')
+        && request.resource.data.createdByUid == request.auth.uid;
+
+      allow read: if isAdministrator()
+        || ownsComplaint(resource.data)
+        || isAssignedDepartment(resource.data);
+
+      allow update: if isAdministrator()
+        || (isAssignedDepartment(resource.data)
+          && request.resource.data.department == resource.data.department
+          && request.resource.data.createdByUid == resource.data.createdByUid
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'resolutionNote', 'resolutionEvidence', 'updatedAt', 'statusHistory']))
+        || (ownsComplaint(resource.data)
+          && request.resource.data.createdByUid == resource.data.createdByUid
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['rating', 'feedback', 'reopenRequested', 'updatedAt']));
+
+      allow delete: if isAdministrator();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

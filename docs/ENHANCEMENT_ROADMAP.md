@@ -22,15 +22,22 @@
 - Improved focus states and keyboard accessibility
 - Added the enhancement as separate `v2.css` and `v2-ui.js` layers to reduce regression risk
 
-## Next: Phase 3 — Authentication and roles
+### Phase 3 — Authentication and roles
 
-- Configure Firebase
-- Add email and password registration
-- Add Google sign-in
-- Add password reset
-- Add citizen, department-officer and administrator roles
-- Protect role-specific dashboards
-- Prevent normal users from opening administrative management features
+- Added Firebase configuration entry point and setup guide
+- Added email and password registration
+- Added Google sign-in
+- Added password reset
+- Added citizen, department-officer and administrator role profiles
+- Protected role-specific dashboards and navigation
+- Restricted officers to assigned departments
+- Restricted priority, reassignment, reset and delete actions to administrators
+- Added Firestore security rules for user profiles and the planned complaint collection
+- Added a session-only demo-role fallback for hackathon testing before Firebase keys are supplied
+- Connected the `civicresolve-ai-3d54c` Firebase project and disabled production demo access
+- Enabled Email/Password and Google sign-in
+- Created the production Firestore database in Mumbai (`asia-south1`)
+- Published the least-privilege role-based Firestore rules
 
 ## Phase 4 — Cloud database
 

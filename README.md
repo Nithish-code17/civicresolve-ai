@@ -34,6 +34,12 @@ CivicResolve AI is an intelligent public grievance redressal portal. Citizens ca
 - Improved responsive layouts for desktop, tablet and mobile
 - Enhanced contrast, focus states and keyboard navigation
 - Non-destructive enhancement layer that preserves the stable complaint logic
+- Firebase email/password authentication and Google sign-in
+- Password reset and citizen self-registration
+- Firestore-backed citizen, department-officer and administrator profiles
+- Protected navigation, department-scoped officer access and administrator-only actions
+- Connected Firebase project with production-only authentication
+- Published least-privilege Firestore rules for citizen, officer and administrator roles
 
 ## Project structure
 
@@ -41,14 +47,20 @@ CivicResolve AI is an intelligent public grievance redressal portal. Citizens ca
 civicresolve-ai/
 ├── assets/
 │   ├── css/
+│   │   ├── auth.css
 │   │   ├── styles.css
 │   │   └── v2.css
 │   └── js/
 │       ├── app.js
+│       ├── auth.js
+│       ├── firebase-config.js
 │       └── v2-ui.js
 ├── docs/
 │   ├── ARCHITECTURE.md
-│   └── ENHANCEMENT_ROADMAP.md
+│   ├── ENHANCEMENT_ROADMAP.md
+│   └── FIREBASE_SETUP.md
+├── firebase.json
+├── firestore.rules
 ├── .gitignore
 ├── index.html
 ├── README.md
@@ -73,6 +85,10 @@ GRV-2026-001
 
 The project is a static HTML, CSS and JavaScript application and can be deployed directly to Vercel. No build command is required.
 
+## Firebase environment
+
+The `enhancement-v2` branch is connected to Firebase project `civicresolve-ai-3d54c`. Email/Password and Google sign-in are enabled, and the default Firestore database uses the Mumbai (`asia-south1`) region. Follow `docs/FIREBASE_SETUP.md` to review the configuration or provision department officers and administrators.
+
 ## Next phase
 
-The next major enhancement is Firebase Authentication with citizen, department-officer and administrator roles.
+The next major enhancement is migrating complaint data from LocalStorage to Cloud Firestore with real-time updates.
