@@ -1,6 +1,6 @@
 # Firebase Authentication Setup
 
-CivicResolve AI now supports Firebase email/password authentication, Google sign-in, password reset and Firestore-backed role profiles.
+CivicResolve AI now supports Firebase email/password authentication, Google sign-in, password reset, Firestore-backed role profiles and real-time complaint storage.
 
 ## Current Firebase environment
 
@@ -43,7 +43,7 @@ firebase use civicresolve-ai-3d54c
 firebase deploy --only firestore:rules
 ```
 
-The rules prevent a newly registered citizen from choosing an officer or administrator role.
+The rules prevent a newly registered citizen from choosing an officer or administrator role. Deploy the latest rules whenever complaint fields or workflow permissions change.
 
 ## 4. User profile documents
 
@@ -110,6 +110,31 @@ The `department` value for an officer must exactly match the complaint departmen
 | Reassign department | No | No | Yes |
 | View analytics | No | Assigned department | All |
 | Delete complaint | No | No | Yes |
+
+## 7. Complaint documents
+
+Every complaint is stored at:
+
+```text
+complaints/{grievanceId}
+```
+
+Important protected fields include:
+
+- `createdByUid` and `createdByEmail` for immutable ownership
+- `department` for officer query scope
+- `status`, `priority` and `resolutionNote` for workflow state
+- `createdAt` and `updatedAt` server timestamps
+- `statusHistory` audit entries containing status, note, actor, role and timestamp
+- `rating` and `feedback`, editable only by the owner after resolution
+
+The browser subscribes with Firebase `onSnapshot()` and uses a different query for each role. Citizens query their UID, officers query their exact department and administrators query all complaints. Do not replace these queries with an unrestricted collection download followed by browser filtering because Firestore rules evaluate queries against their possible result set.
+
+## 8. Local complaint migration
+
+After a citizen signs in for the first time, CivicResolve checks for complaint data created by the older LocalStorage version. Eligible `Submitted` complaints owned by the same UID or email are copied to Firestore once. Demo samples and complaints belonging to another account are not migrated.
+
+LocalStorage remains the active data source only when Firebase configuration is absent and demo mode is explicitly enabled.
 
 ## Demo mode
 

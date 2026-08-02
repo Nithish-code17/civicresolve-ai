@@ -385,6 +385,7 @@
     getProfile: () => state.profile,
     getRole: () => state.profile?.role || null,
     getRoleLabel: () => ROLE_LABELS[state.profile?.role] || "User",
+    getFirebaseServices: () => state.mode === "firebase" ? { db: state.db, sdk: state.sdk } : null,
     canAccess,
     canManageComplaint,
     canDeleteComplaint: () => state.profile?.role === ROLES.ADMIN,

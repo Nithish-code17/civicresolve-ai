@@ -39,12 +39,15 @@
 - Created the production Firestore database in Mumbai (`asia-south1`)
 - Published the least-privilege role-based Firestore rules
 
-## Phase 4 — Cloud database
+### Phase 4 — Cloud database
 
-- Replace LocalStorage with Firestore
-- Store users, complaints, departments, officers and status history
-- Add real-time complaint updates
-- Add migration support for demo data
+- Replaced production LocalStorage complaint persistence with Firestore
+- Added role-scoped real-time complaint listeners
+- Added citizen complaint creation with server timestamps and immutable ownership
+- Added officer/admin workflow updates with timestamped status history
+- Added Firestore-backed citizen feedback and administrator deletion
+- Added one-time migration support for eligible citizen LocalStorage complaints
+- Retained LocalStorage only for explicitly enabled demo mode
 
 ## Phase 5 — Evidence and location
 
