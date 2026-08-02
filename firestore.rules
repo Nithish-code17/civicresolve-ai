@@ -32,6 +32,92 @@ service cloud.firestore {
         && currentUser().data.department == data.department;
     }
 
+    function complaintFieldsAreComplete(data) {
+      let fields = [
+        'id', 'citizenName', 'email', 'phone', 'title', 'description',
+        'location', 'category', 'department', 'priority', 'status',
+        'expectedResolutionDate', 'resolutionNote', 'rating', 'feedback',
+        'duplicateId', 'createdByUid', 'createdByEmail', 'createdAt',
+        'updatedAt', 'statusHistory'
+      ];
+      return data.keys().hasAll(fields) && data.keys().hasOnly(fields);
+    }
+
+    function complaintFieldsHaveValidTypes(data, complaintId) {
+      return data.id is string
+        && data.id == complaintId
+        && data.id.size() <= 80
+        && data.citizenName is string
+        && data.citizenName.size() >= 2
+        && data.citizenName.size() <= 120
+        && data.email is string
+        && data.email.size() <= 254
+        && data.phone is string
+        && data.phone.size() <= 20
+        && data.title is string
+        && data.title.size() >= 3
+        && data.title.size() <= 160
+        && data.description is string
+        && data.description.size() >= 15
+        && data.description.size() <= 5000
+        && data.location is string
+        && data.location.size() >= 3
+        && data.location.size() <= 500
+        && data.category is string
+        && data.category.size() <= 100
+        && data.department in [
+          'Public Works Department', 'Municipal Waste Department',
+          'Water Supply Department', 'Electricity Department',
+          'Sanitation Department', 'Transport Department',
+          'Municipal Corporation', 'General Administration'
+        ]
+        && data.priority in ['High', 'Medium', 'Low']
+        && data.status in ['Submitted', 'Under Review', 'Assigned', 'In Progress', 'Resolved']
+        && data.expectedResolutionDate is string
+        && data.expectedResolutionDate.size() == 10
+        && data.resolutionNote is string
+        && data.resolutionNote.size() <= 3000
+        && (data.rating == null || (data.rating is int && data.rating >= 1 && data.rating <= 5))
+        && data.feedback is string
+        && data.feedback.size() <= 1000
+        && data.duplicateId is string
+        && data.duplicateId.size() <= 80
+        && data.createdByUid is string
+        && data.createdByEmail is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.statusHistory is list
+        && data.statusHistory.size() >= 1
+        && data.statusHistory.size() <= 100;
+    }
+
+    function initialHistoryIsValid(data) {
+      let entry = data.statusHistory[0];
+      return data.statusHistory.size() == 1
+        && entry.status == 'Submitted'
+        && entry.note is string
+        && entry.note.size() <= 3000
+        && entry.changedAt is timestamp
+        && entry.changedByUid == request.auth.uid
+        && entry.changedByName is string
+        && entry.changedByRole == 'citizen';
+    }
+
+    function historyAppendIsValid() {
+      let newHistory = request.resource.data.statusHistory;
+      let oldHistory = resource.data.statusHistory;
+      let entry = newHistory[newHistory.size() - 1];
+      return newHistory.size() == oldHistory.size() + 1
+        && newHistory.hasAll(oldHistory)
+        && entry.status == request.resource.data.status
+        && entry.note is string
+        && entry.note.size() <= 3000
+        && entry.changedAt is timestamp
+        && entry.changedByUid == request.auth.uid
+        && entry.changedByName is string
+        && entry.changedByRole == currentUser().data.role;
+    }
+
     match /users/{userId} {
       allow create: if signedIn()
         && request.auth.uid == userId
@@ -53,25 +139,54 @@ service cloud.firestore {
       allow delete: if isAdministrator();
     }
 
-    // These rules are ready for the Phase 4 Firestore complaint migration.
     match /complaints/{complaintId} {
       allow create: if hasRole('citizen')
-        && request.resource.data.createdByUid == request.auth.uid;
+        && complaintFieldsAreComplete(request.resource.data)
+        && complaintFieldsHaveValidTypes(request.resource.data, complaintId)
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.createdByEmail == request.auth.token.email
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.citizenName == currentUser().data.displayName
+        && request.resource.data.status == 'Submitted'
+        && request.resource.data.resolutionNote == ''
+        && request.resource.data.rating == null
+        && request.resource.data.feedback == ''
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && initialHistoryIsValid(request.resource.data);
 
       allow read: if isAdministrator()
         || ownsComplaint(resource.data)
         || isAssignedDepartment(resource.data);
 
-      allow update: if isAdministrator()
+      allow update: if (isAdministrator()
+          && complaintFieldsAreComplete(request.resource.data)
+          && complaintFieldsHaveValidTypes(request.resource.data, complaintId)
+          && request.resource.data.createdByUid == resource.data.createdByUid
+          && request.resource.data.createdByEmail == resource.data.createdByEmail
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'resolutionNote', 'priority', 'department', 'updatedAt', 'statusHistory'])
+          && historyAppendIsValid())
         || (isAssignedDepartment(resource.data)
+          && complaintFieldsAreComplete(request.resource.data)
+          && complaintFieldsHaveValidTypes(request.resource.data, complaintId)
           && request.resource.data.department == resource.data.department
           && request.resource.data.createdByUid == resource.data.createdByUid
+          && request.resource.data.updatedAt == request.time
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'resolutionNote', 'resolutionEvidence', 'updatedAt', 'statusHistory']))
+            .hasOnly(['status', 'resolutionNote', 'updatedAt', 'statusHistory'])
+          && historyAppendIsValid())
         || (ownsComplaint(resource.data)
+          && resource.data.status == 'Resolved'
+          && complaintFieldsAreComplete(request.resource.data)
+          && complaintFieldsHaveValidTypes(request.resource.data, complaintId)
           && request.resource.data.createdByUid == resource.data.createdByUid
+          && request.resource.data.updatedAt == request.time
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['rating', 'feedback', 'reopenRequested', 'updatedAt']));
+            .hasOnly(['rating', 'feedback', 'updatedAt']));
 
       allow delete: if isAdministrator();
     }

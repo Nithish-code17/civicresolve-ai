@@ -11,11 +11,12 @@ The project remains build-free and uses browser-native JavaScript modules for Fi
 - `index.html` provides the application entry point.
 - `assets/css/styles.css` contains the shared design system and responsive styles.
 - `assets/js/auth.js` owns Firebase sessions, user profiles and role permissions.
+- `assets/js/firestore-data.js` owns role-scoped complaint queries, writes, migration and real-time listeners.
 - `assets/js/app.js` contains the current complaint workflow and role-aware user interface logic.
 - `assets/js/firebase-config.js` contains the Firebase Web App project configuration entry point.
-- Browser LocalStorage remains the active data layer until Firebase migration begins.
-- Firestore stores authenticated user profiles and role assignments once Firebase is configured.
-- `firestore.rules` prevents self-promotion and defines complaint access for the next migration phase.
+- Firestore stores authenticated user profiles, role assignments, complaints and status history.
+- LocalStorage is used only for explicit demo mode and one-time migration of eligible citizen-owned complaints.
+- `firestore.rules` prevents self-promotion, enforces complaint ownership and limits officer/admin mutations by role.
 
 This first restructuring commit changes file organisation only. It does not intentionally change complaint behaviour or stored data.
 
@@ -76,13 +77,25 @@ assets/js/
 
 Browser LocalStorage is retained to protect the working MVP while the UI and code structure are improved.
 
-### Stage 2 — in progress
+### Stage 2 — complete
 
-Firebase Authentication and Firestore user profiles now replace anonymous access. LocalStorage remains the temporary complaint data layer; Firestore and Storage will replace it during the cloud-data and evidence phases.
+Firebase Authentication and Firestore user profiles replace anonymous access. Citizens, department officers and administrators receive role-specific application routes.
 
-### Stage 3 — foundation complete
+### Stage 3 — complete
 
-Interface guards and Firestore security rules restrict access according to citizen, officer and administrator roles. These complaint rules become active when the complaint service migrates to Firestore.
+Interface guards and Firestore security rules restrict access according to citizen, officer and administrator roles.
+
+### Stage 4 — complete
+
+The complaint service stores complaints in Firestore and uses real-time role-scoped listeners:
+
+- Citizens query only documents matching their Firebase UID.
+- Officers query only documents matching their assigned department.
+- Administrators query the complete complaint collection.
+- Citizen creation fixes ownership, initial status and timestamps.
+- Official updates append immutable audit-history entries.
+- Citizen feedback is permitted only on owned resolved complaints.
+- Eligible LocalStorage citizen complaints can migrate once after sign-in.
 
 ## Development principles
 

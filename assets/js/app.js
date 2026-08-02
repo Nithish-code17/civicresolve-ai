@@ -1,4 +1,3 @@
-const STORAGE_KEY = "civicresolve_complaints_v1";
 const STATUS_FLOW = ["Submitted", "Under Review", "Assigned", "In Progress", "Resolved"];
 const COLORS = ["#1f6f5f", "#7b4bb7", "#e5a53a", "#d15c5c", "#3f7cac", "#6e9f5f", "#b56a96"];
 
@@ -11,47 +10,22 @@ const CATEGORY_RULES = [
   { category: "Public Transport", department: "Transport Department", days: 4, keywords: ["bus", "transport", "bus stop", "route", "conductor", "ticket"] },
   { category: "Parks & Public Spaces", department: "Municipal Corporation", days: 4, keywords: ["park", "playground", "bench", "public toilet", "garden"] }
 ];
+const DEPARTMENTS = [...new Set([...CATEGORY_RULES.map(rule => rule.department), "General Administration"])];
 
 const HIGH_PRIORITY_WORDS = ["danger", "accident", "fire", "emergency", "electric shock", "exposed wire", "hospital", "school", "fallen tree", "blocked road", "burst"];
 const MEDIUM_PRIORITY_WORDS = ["overflow", "not working", "three days", "many days", "bad smell", "leakage"];
 
-const SAMPLE_COMPLAINTS = [
-  {
-    id: "GRV-2026-001", citizenName: "Arun Kumar", email: "arun@example.com", phone: "9876543210",
-    title: "Large pothole near bus stand", description: "A large pothole is causing accidents near the main bus stand.",
-    location: "Gandhipuram Bus Stand, Coimbatore", category: "Roads & Potholes", department: "Public Works Department",
-    priority: "High", status: "In Progress", createdAt: "2026-07-30", expectedResolutionDate: "2026-08-04",
-    resolutionNote: "Repair team has inspected the location and work has started.", rating: null, feedback: ""
-  },
-  {
-    id: "GRV-2026-002", citizenName: "Meena S", email: "meena@example.com", phone: "9876501234",
-    title: "Garbage not collected", description: "Garbage has not been collected for three days and there is a bad smell.",
-    location: "RS Puram, Coimbatore", category: "Waste Management", department: "Municipal Waste Department",
-    priority: "Medium", status: "Assigned", createdAt: "2026-07-31", expectedResolutionDate: "2026-08-02",
-    resolutionNote: "Assigned to Ward 23 sanitation team.", rating: null, feedback: ""
-  },
-  {
-    id: "GRV-2026-003", citizenName: "Rahul P", email: "rahul@example.com", phone: "9876511111",
-    title: "Streetlight not working", description: "The streetlight near the school is not working and the road is dark at night.",
-    location: "Saibaba Colony, Coimbatore", category: "Electricity & Streetlights", department: "Electricity Department",
-    priority: "High", status: "Resolved", createdAt: "2026-07-28", expectedResolutionDate: "2026-07-30",
-    resolutionNote: "Faulty light unit replaced and tested successfully.", rating: 5, feedback: "Resolved quickly. Thank you."
-  },
-  {
-    id: "GRV-2026-004", citizenName: "Divya R", email: "divya@example.com", phone: "9876522222",
-    title: "Water pipeline leakage", description: "A water pipe is leaking continuously near the market.",
-    location: "Town Hall, Coimbatore", category: "Water Supply", department: "Water Supply Department",
-    priority: "Medium", status: "Submitted", createdAt: "2026-08-01", expectedResolutionDate: "2026-08-03",
-    resolutionNote: "", rating: null, feedback: ""
-  }
-];
-
-let complaints = loadComplaints();
+let complaints = [];
 let activePage = "dashboard";
 let lastSubmitted = null;
 let trackingResult = null;
 let trackingError = "";
 let selectedComplaintId = null;
+let complaintDataReady = false;
+let complaintDataError = "";
+let complaintUnsubscribe = null;
+let complaintSyncKey = "";
+const migrationChecks = new Set();
 
 function authProfile() { return window.CivicAuth?.getProfile() || null; }
 function currentRole() { return window.CivicAuth?.getRole() || "citizen"; }
@@ -69,19 +43,6 @@ function canViewComplaint(item) {
   if (isAdministrator()) return true;
   if (isOfficer()) return window.CivicAuth.canManageComplaint(item);
   return window.CivicAuth.ownsComplaint(item);
-}
-
-function loadComplaints() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    return Array.isArray(saved) && saved.length ? saved : structuredClone(SAMPLE_COMPLAINTS);
-  } catch {
-    return structuredClone(SAMPLE_COMPLAINTS);
-  }
-}
-
-function saveComplaints() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(complaints));
 }
 
 function escapeHtml(value = "") {
@@ -115,8 +76,23 @@ function addDays(dateString, days) {
 
 function formatDate(dateString) {
   if (!dateString) return "—";
+  const value = typeof dateString.toDate === "function" ? dateString.toDate() : dateString;
+  const date = value instanceof Date
+    ? value
+    : new Date(String(value).length === 10 ? `${value}T12:00:00` : value);
+  if (Number.isNaN(date.getTime())) return "—";
   return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" })
-    .format(new Date(`${dateString}T12:00:00`));
+    .format(date);
+}
+
+function formatDateTime(dateString) {
+  if (!dateString) return "Time unavailable";
+  const value = typeof dateString.toDate === "function" ? dateString.toDate() : dateString;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return formatDate(dateString);
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
+  }).format(date);
 }
 
 function statusSlug(status) { return status.toLowerCase().replaceAll(" ", "-"); }
@@ -138,9 +114,10 @@ function countBy(key, items = complaints) {
   return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 }
 
-function showToast(message) {
+function showToast(message, tone = "success") {
   const toast = document.getElementById("toast");
-  toast.textContent = `✓ ${message}`;
+  toast.textContent = `${tone === "error" ? "⚠" : "✓"} ${message}`;
+  toast.dataset.tone = tone;
   toast.classList.add("show");
   clearTimeout(showToast.timer);
   showToast.timer = setTimeout(() => toast.classList.remove("show"), 3200);
@@ -211,11 +188,95 @@ function renderApp() {
 }
 
 function renderPage() {
+  if (!complaintDataReady) return renderComplaintDataState();
   if (activePage === "submit") return renderSubmitPage();
   if (activePage === "track") return renderTrackPage();
   if (activePage === "admin") return renderAdminPage();
   if (activePage === "analytics") return renderAnalyticsPage();
   return renderDashboard();
+}
+
+function renderComplaintDataState() {
+  if (complaintDataError) return `<section class="data-state-card error-state">
+    <div class="data-state-icon">⚠</div><p class="eyebrow">Secure data connection</p>
+    <h2>Complaints could not be loaded</h2><p>${escapeHtml(complaintDataError)}</p>
+    <button id="retryComplaintSync" class="primary-button" type="button">Retry Firestore connection</button>
+  </section>`;
+  return `<section class="data-state-card"><div class="data-spinner" aria-hidden="true"></div>
+    <p class="eyebrow">Secure data connection</p><h2>Loading authorised complaints…</h2>
+    <p>CivicResolve is opening the real-time complaint view permitted for your account.</p>
+  </section>`;
+}
+
+function stopComplaintSync() {
+  complaintUnsubscribe?.();
+  complaintUnsubscribe = null;
+  complaintSyncKey = "";
+  complaints = [];
+  complaintDataReady = false;
+  complaintDataError = "";
+}
+
+function complaintConnectionError(error) {
+  const messages = {
+    "permission-denied": "Your account is signed in, but Firestore denied this complaint view. Check the account role and published security rules.",
+    "unavailable": "Firestore is temporarily unavailable. Check your internet connection and try again.",
+    "failed-precondition": "Firestore needs an index for this complaint view. Review the Firebase console message and create the suggested index."
+  };
+  return messages[error?.code] || error?.message || "The real-time complaint connection failed.";
+}
+
+function handleComplaintSnapshot(items) {
+  const wasReady = complaintDataReady;
+  complaints = items;
+  complaintDataReady = true;
+  complaintDataError = "";
+
+  if (trackingResult) {
+    const updatedTrackingResult = complaints.find(item => item.id === trackingResult.id) || null;
+    if (!updatedTrackingResult) trackingError = "This complaint is no longer available to your account.";
+    trackingResult = updatedTrackingResult;
+  }
+  if (lastSubmitted) lastSubmitted = complaints.find(item => item.id === lastSubmitted.id) || lastSubmitted;
+
+  const current = authProfile();
+  if (current?.role === "citizen" && !migrationChecks.has(current.uid)) {
+    migrationChecks.add(current.uid);
+    window.CivicComplaints.migrateLegacyCitizenComplaints(complaints.map(item => item.id))
+      .then(count => { if (count) showToast(`${count} local complaint${count === 1 ? "" : "s"} migrated to Firestore.`); })
+      .catch(error => console.warn("Local complaint migration could not complete.", error));
+  }
+
+  if (!wasReady || ["dashboard", "track", "admin", "analytics"].includes(activePage) || lastSubmitted) renderApp();
+}
+
+function startComplaintSync(force = false) {
+  if (!window.CivicAuth?.isAuthenticated()) return;
+  const current = authProfile();
+  const nextKey = `${current?.uid || ""}:${current?.role || ""}:${current?.department || ""}`;
+  if (!force && complaintUnsubscribe && complaintSyncKey === nextKey) return;
+
+  complaintUnsubscribe?.();
+  complaintUnsubscribe = null;
+  complaintSyncKey = nextKey;
+  complaints = [];
+  complaintDataReady = false;
+  complaintDataError = "";
+  renderApp();
+
+  try {
+    complaintUnsubscribe = window.CivicComplaints.subscribe(handleComplaintSnapshot, error => {
+      console.error("Firestore complaint listener failed.", error);
+      complaintDataReady = false;
+      complaintDataError = complaintConnectionError(error);
+      renderApp();
+    });
+  } catch (error) {
+    console.error("Firestore complaint connection could not start.", error);
+    complaintDataReady = false;
+    complaintDataError = complaintConnectionError(error);
+    renderApp();
+  }
 }
 
 function attachShellEvents() {
@@ -403,8 +464,17 @@ function renderTrackingResult(item) {
     </div>
     <div class="description-block"><strong>Complaint description</strong><p>${escapeHtml(item.description)}</p></div>
     <div class="timeline-card"><h3>Status timeline</h3><div class="timeline">${STATUS_FLOW.map((status, index) => `<div class="timeline-step ${index <= currentIndex ? "complete" : ""} ${index === currentIndex ? "current" : ""}"><div class="timeline-marker">${index <= currentIndex ? "✓" : "○"}</div><span>${status}</span></div>`).join("")}</div></div>
+    ${renderStatusHistory(item)}
     ${item.resolutionNote ? `<div class="resolution-note">✓<div><strong>Department update</strong><p>${escapeHtml(item.resolutionNote)}</p></div></div>` : ""}
     ${item.status === "Resolved" && isCitizen() && window.CivicAuth.ownsComplaint(item) ? renderFeedback(item) : ""}
+  </section>`;
+}
+
+function renderStatusHistory(item) {
+  const history = Array.isArray(item.statusHistory) ? [...item.statusHistory].reverse() : [];
+  if (!history.length) return "";
+  return `<section class="status-history"><div class="status-history-heading"><h3>Recorded update history</h3><span>${history.length} event${history.length === 1 ? "" : "s"}</span></div>
+    <div class="history-list">${history.map(entry => `<article class="history-entry"><div class="history-dot"></div><div><div class="history-entry-top"><strong>${escapeHtml(entry.status || "Update")}</strong><time>${escapeHtml(formatDateTime(entry.changedAt))}</time></div><p>${escapeHtml(entry.note || "Complaint status updated.")}</p><small>${escapeHtml(entry.changedByName || "CivicResolve user")} · ${escapeHtml(entry.changedByRole || "user")}</small></div></article>`).join("")}</div>
   </section>`;
 }
 
@@ -421,7 +491,7 @@ function renderAdminPage() {
   const subtitle = isOfficer() ? `Showing complaints assigned to ${authProfile()?.department || "your department"}` : "Search, assign and update citizen grievances";
   return `<div class="page-stack">
     <section class="stats-grid compact-stats">${statCard("Total", stats.total, "☷")}${statCard("High Priority", stats.highPriority, "⚠", "", "danger")}${statCard("Active Work", stats.inProgress, "◉", "", "info")}${statCard("Resolved", stats.resolved, "✓", "", "success")}</section>
-    ${panel("Complaint management", subtitle, `<div class="filter-row"><div class="search-box">⌕<input id="adminSearch" placeholder="Search ID, title, citizen or location"></div><select id="statusFilter"><option>All</option>${STATUS_FLOW.map(s => `<option>${s}</option>`).join("")}</select><select id="priorityFilter"><option>All</option><option>High</option><option>Medium</option><option>Low</option></select></div><div id="adminTable">${complaintTable(managedComplaints)}</div>`, isAdministrator() ? '<button id="resetDemo" class="secondary-button small">Reset demo data</button>' : '<span class="role-badge">Department scope</span>')}
+    ${panel("Complaint management", subtitle, `<div class="filter-row"><div class="search-box">⌕<input id="adminSearch" placeholder="Search ID, title, citizen or location"></div><select id="statusFilter"><option>All</option>${STATUS_FLOW.map(s => `<option>${s}</option>`).join("")}</select><select id="priorityFilter"><option>All</option><option>High</option><option>Medium</option><option>Low</option></select></div><div id="adminTable">${complaintTable(managedComplaints)}</div>`, window.CivicComplaints.isDemoMode() && isAdministrator() ? '<button id="resetDemo" class="secondary-button small">Reset demo data</button>' : '<span class="role-badge">Live Firestore</span>')}
   </div>`;
 }
 
@@ -442,7 +512,10 @@ function renderAnalyticsPage() {
 }
 
 function attachPageEvents() {
+  document.getElementById("retryComplaintSync")?.addEventListener("click", () => startComplaintSync(true));
   document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click", () => navigate(button.dataset.go)));
+
+  if (!complaintDataReady) return;
 
   if (activePage === "submit") {
     if (lastSubmitted) {
@@ -487,7 +560,7 @@ function attachPageEvents() {
   if (activePage === "admin") attachAdminEvents();
 }
 
-function submitComplaint(event) {
+async function submitComplaint(event) {
   event.preventDefault();
   if (!isCitizen()) {
     showToast("Only citizen accounts can submit complaints.");
@@ -500,29 +573,29 @@ function submitComplaint(event) {
   const analysis = analyseComplaint(data.title, data.description);
   const location = data.location.toLowerCase();
   const duplicate = complaints.find(item => item.status !== "Resolved" && item.category === analysis.category && (item.location.toLowerCase().includes(location) || location.includes(item.location.toLowerCase())));
-  const maxNumber = complaints.reduce((max, item) => Math.max(max, Number(item.id.split("-").pop()) || 0), 0);
   const today = new Date().toISOString().slice(0, 10);
-  const complaint = {
-    id: `GRV-${new Date().getFullYear()}-${String(maxNumber + 1).padStart(3, "0")}`,
-    ...data,
-    category: analysis.category,
-    department: analysis.department,
-    priority: analysis.priority,
-    status: "Submitted",
-    createdAt: today,
-    expectedResolutionDate: addDays(today, analysis.days),
-    resolutionNote: "",
-    rating: null,
-    feedback: "",
-    duplicateId: duplicate?.id || "",
-    createdByUid: profile?.uid || "",
-    createdByEmail: profile?.email || ""
-  };
-  complaints.unshift(complaint);
-  saveComplaints();
-  lastSubmitted = complaint;
-  showToast(`Complaint ${complaint.id} submitted successfully.`);
-  renderApp();
+  const submitButton = event.currentTarget.querySelector('[type="submit"]');
+  const originalLabel = submitButton.textContent;
+  submitButton.disabled = true;
+  submitButton.textContent = "Submitting securely…";
+  try {
+    const complaint = await window.CivicComplaints.create({
+      ...data,
+      category: analysis.category,
+      department: analysis.department,
+      priority: analysis.priority,
+      expectedResolutionDate: addDays(today, analysis.days),
+      duplicateId: duplicate?.id || ""
+    });
+    lastSubmitted = complaint;
+    showToast(`Complaint ${complaint.id} submitted successfully.`);
+    renderApp();
+  } catch (error) {
+    console.error("Complaint submission failed.", error);
+    showToast(complaintConnectionError(error), "error");
+    submitButton.disabled = false;
+    submitButton.textContent = originalLabel;
+  }
 }
 
 function attachTrackingEvents() {
@@ -534,17 +607,25 @@ function attachTrackingEvents() {
     const saveButton = document.getElementById("saveFeedback");
     if (saveButton) saveButton.dataset.rating = currentRating;
   }));
-  document.getElementById("saveFeedback")?.addEventListener("click", event => {
+  document.getElementById("saveFeedback")?.addEventListener("click", async event => {
     const id = event.currentTarget.dataset.id;
     const rating = Number(event.currentTarget.dataset.rating || currentRating);
     const feedback = document.getElementById("feedbackText").value.trim();
     const item = complaints.find(complaint => complaint.id === id);
     if (!item) return;
-    item.rating = rating;
-    item.feedback = feedback;
-    trackingResult = item;
-    saveComplaints();
-    showToast("Feedback saved successfully.");
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = "Saving…";
+    try {
+      await window.CivicComplaints.saveFeedback(id, rating, feedback);
+      trackingResult = { ...item, rating, feedback };
+      showToast("Feedback saved successfully.");
+    } catch (error) {
+      console.error("Feedback could not be saved.", error);
+      showToast(complaintConnectionError(error), "error");
+      button.disabled = false;
+      button.textContent = "Save Feedback";
+    }
   });
 }
 
@@ -567,27 +648,34 @@ function attachAdminEvents() {
   document.getElementById("resetDemo")?.addEventListener("click", () => {
     if (!isAdministrator()) return;
     if (!confirm("Reset all data to the original demo complaints?")) return;
-    complaints = structuredClone(SAMPLE_COMPLAINTS);
-    saveComplaints();
-    showToast("Demo data restored.");
-    renderApp();
+    try {
+      window.CivicComplaints.resetDemoData();
+      showToast("Demo data restored.");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
   });
   attachTableEvents();
 }
 
 function attachTableEvents() {
   document.querySelectorAll("[data-manage]").forEach(button => button.addEventListener("click", () => openManageModal(button.dataset.manage)));
-  document.querySelectorAll("[data-delete]").forEach(button => button.addEventListener("click", () => {
+  document.querySelectorAll("[data-delete]").forEach(button => button.addEventListener("click", async () => {
     if (!window.CivicAuth.canDeleteComplaint()) {
       showToast("Only administrators can delete complaints.");
       return;
     }
     const id = button.dataset.delete;
     if (!confirm(`Delete complaint ${id}?`)) return;
-    complaints = complaints.filter(item => item.id !== id);
-    saveComplaints();
-    showToast(`Complaint ${id} deleted.`);
-    renderApp();
+    button.disabled = true;
+    try {
+      await window.CivicComplaints.delete(id);
+      showToast(`Complaint ${id} deleted.`);
+    } catch (error) {
+      console.error("Complaint deletion failed.", error);
+      showToast(complaintConnectionError(error), "error");
+      button.disabled = false;
+    }
   }));
 }
 
@@ -605,7 +693,7 @@ function openManageModal(id) {
     <div class="modal-summary"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.location)}</span></div>
     <label class="field-label"><span>Status</span><select id="modalStatus">${STATUS_FLOW.map(status => `<option ${status === item.status ? "selected" : ""}>${status}</option>`).join("")}</select></label>
     <label class="field-label"><span>Priority ${isOfficer() ? "(administrator controlled)" : ""}</span><select id="modalPriority" ${adminOnly}>${["High","Medium","Low"].map(priority => `<option ${priority === item.priority ? "selected" : ""}>${priority}</option>`).join("")}</select></label>
-    <label class="field-label"><span>Assigned department ${isOfficer() ? "(fixed to your department)" : ""}</span><input id="modalDepartment" value="${escapeHtml(item.department)}" ${adminOnly}></label>
+    <label class="field-label"><span>Assigned department ${isOfficer() ? "(fixed to your department)" : ""}</span><select id="modalDepartment" ${adminOnly}>${DEPARTMENTS.map(department => `<option ${department === item.department ? "selected" : ""}>${escapeHtml(department)}</option>`).join("")}</select></label>
     <label class="field-label"><span>Resolution / progress note</span><textarea id="modalNote" rows="5" placeholder="Add an official progress update.">${escapeHtml(item.resolutionNote || "")}</textarea></label>
     <div class="button-row end"><button id="cancelModal" class="secondary-button">Cancel</button><button id="saveModal" class="primary-button">Save Changes</button></div>
   </div></div>`;
@@ -613,27 +701,38 @@ function openManageModal(id) {
   document.getElementById("closeModal").addEventListener("click", close);
   document.getElementById("cancelModal").addEventListener("click", close);
   document.getElementById("modalBackdrop").addEventListener("click", event => { if (event.target.id === "modalBackdrop") close(); });
-  document.getElementById("saveModal").addEventListener("click", () => {
+  document.getElementById("saveModal").addEventListener("click", async event => {
     if (!window.CivicAuth.canManageComplaint(item)) {
       showToast("Your role can no longer update this complaint.");
       close();
       return;
     }
-    item.status = document.getElementById("modalStatus").value;
+    const changes = {
+      status: document.getElementById("modalStatus").value,
+      resolutionNote: document.getElementById("modalNote").value.trim()
+    };
     if (isAdministrator()) {
-      item.priority = document.getElementById("modalPriority").value;
-      item.department = document.getElementById("modalDepartment").value.trim();
+      changes.priority = document.getElementById("modalPriority").value;
+      changes.department = document.getElementById("modalDepartment").value.trim();
     }
-    item.resolutionNote = document.getElementById("modalNote").value.trim();
-    saveComplaints();
-    showToast(`Complaint ${id} updated.`);
-    close();
-    renderApp();
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = "Saving…";
+    try {
+      await window.CivicComplaints.updateOfficial(id, changes);
+      showToast(`Complaint ${id} updated.`);
+      close();
+    } catch (error) {
+      console.error("Complaint update failed.", error);
+      showToast(complaintConnectionError(error), "error");
+      button.disabled = false;
+      button.textContent = "Save Changes";
+    }
   });
 }
 
 window.CivicAuth.ready().then(() => {
-  if (window.CivicAuth.isAuthenticated()) renderApp();
+  if (window.CivicAuth.isAuthenticated()) startComplaintSync();
   else window.CivicAuth.renderAuthScreen();
 });
 
@@ -643,5 +742,6 @@ document.addEventListener("civic-auth-changed", event => {
   trackingError = "";
   selectedComplaintId = null;
   activePage = "dashboard";
-  if (event.detail.authenticated) renderApp();
+  if (event.detail.authenticated) startComplaintSync();
+  else stopComplaintSync();
 });

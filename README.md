@@ -20,7 +20,10 @@ CivicResolve AI is an intelligent public grievance redressal portal. Citizens ca
 - Status, priority, department and resolution-note updates
 - Citizen rating and feedback
 - Dashboard and analytics charts
-- Browser LocalStorage persistence
+- Cloud Firestore complaint persistence
+- Real-time citizen, department-officer and administrator views
+- Timestamped complaint status history
+- One-time migration of eligible citizen LocalStorage complaints
 - Responsive mobile and desktop design
 
 ## Version 2 interface enhancements
@@ -54,6 +57,7 @@ civicresolve-ai/
 │       ├── app.js
 │       ├── auth.js
 │       ├── firebase-config.js
+│       ├── firestore-data.js
 │       └── v2-ui.js
 ├── docs/
 │   ├── ARCHITECTURE.md
@@ -81,14 +85,16 @@ Open `http://localhost:5500` in a browser.
 GRV-2026-001
 ```
 
+This sample ID is available only when local demo mode is explicitly enabled. Production accounts receive Firestore-backed grievance IDs.
+
 ## Deployment
 
 The project is a static HTML, CSS and JavaScript application and can be deployed directly to Vercel. No build command is required.
 
 ## Firebase environment
 
-The `enhancement-v2` branch is connected to Firebase project `civicresolve-ai-3d54c`. Email/Password and Google sign-in are enabled, and the default Firestore database uses the Mumbai (`asia-south1`) region. Follow `docs/FIREBASE_SETUP.md` to review the configuration or provision department officers and administrators.
+The `enhancement-v2` branch is connected to Firebase project `civicresolve-ai-3d54c`. Email/Password and Google sign-in are enabled, and the default Firestore database uses the Mumbai (`asia-south1`) region. Complaints are stored in role-protected Firestore documents and synchronized with snapshot listeners. Follow `docs/FIREBASE_SETUP.md` to review the configuration or provision department officers and administrators.
 
 ## Next phase
 
-The next major enhancement is migrating complaint data from LocalStorage to Cloud Firestore with real-time updates.
+The next major enhancement is Firebase Storage evidence upload and map-based complaint locations.
