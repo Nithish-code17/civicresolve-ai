@@ -1,0 +1,123 @@
+  }
+
+  if (activePage === "admin") attachAdminEvents();
+}
+
+function submitComplaint(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.currentTarget));
+  const analysis = analyseComplaint(data.title, data.description);
+  const location = data.location.toLowerCase();
+  const duplicate = complaints.find(item => item.status !== "Resolved" && item.category === analysis.category && (item.location.toLowerCase().includes(location) || location.includes(item.location.toLowerCase())));
+  const maxNumber = complaints.reduce((max, item) => Math.max(max, Number(item.id.split("-").pop()) || 0), 0);
+  const today = new Date().toISOString().slice(0, 10);
+  const complaint = {
+    id: `GRV-${new Date().getFullYear()}-${String(maxNumber + 1).padStart(3, "0")}`,
+    ...data,
+    category: analysis.category,
+    department: analysis.department,
+    priority: analysis.priority,
+    status: "Submitted",
+    createdAt: today,
+    expectedResolutionDate: addDays(today, analysis.days),
+    resolutionNote: "",
+    rating: null,
+    feedback: "",
+    duplicateId: duplicate?.id || ""
+  };
+  complaints.unshift(complaint);
+  saveComplaints();
+  lastSubmitted = complaint;
+  showToast(`Complaint ${complaint.id} submitted successfully.`);
+  renderApp();
+}
+
+function attachTrackingEvents() {
+  let currentRating = trackingResult?.rating || 5;
+  document.querySelectorAll("[data-rating]").forEach(button => button.addEventListener("click", () => {
+    currentRating = Number(button.dataset.rating);
+    document.querySelectorAll("[data-rating]").forEach(star => star.classList.toggle("active", Number(star.dataset.rating) <= currentRating));
+    const saveButton = document.getElementById("saveFeedback");
+    if (saveButton) saveButton.dataset.rating = currentRating;
+  }));
+  document.getElementById("saveFeedback")?.addEventListener("click", event => {
+    const id = event.currentTarget.dataset.id;
+    const rating = Number(event.currentTarget.dataset.rating || currentRating);
+    const feedback = document.getElementById("feedbackText").value.trim();
+    const item = complaints.find(complaint => complaint.id === id);
+    if (!item) return;
+    item.rating = rating;
+    item.feedback = feedback;
+    trackingResult = item;
+    saveComplaints();
+    showToast("Feedback saved successfully.");
+  });
+}
+
+function attachAdminEvents() {
+  const search = document.getElementById("adminSearch");
+  const status = document.getElementById("statusFilter");
+  const priority = document.getElementById("priorityFilter");
+  const refresh = () => {
+    const text = search.value.toLowerCase();
+    const filtered = complaints.filter(item => `${item.id} ${item.title} ${item.citizenName} ${item.location}`.toLowerCase().includes(text)
+      && (status.value === "All" || item.status === status.value)
+      && (priority.value === "All" || item.priority === priority.value));
+    document.getElementById("adminTable").innerHTML = complaintTable(filtered);
+    attachTableEvents();
+  };
+  search.addEventListener("input", refresh);
+  status.addEventListener("change", refresh);
+  priority.addEventListener("change", refresh);
+  document.getElementById("resetDemo").addEventListener("click", () => {
+    if (!confirm("Reset all data to the original demo complaints?")) return;
+    complaints = structuredClone(SAMPLE_COMPLAINTS);
+    saveComplaints();
+    showToast("Demo data restored.");
+    renderApp();
+  });
+  attachTableEvents();
+}
+
+function attachTableEvents() {
+  document.querySelectorAll("[data-manage]").forEach(button => button.addEventListener("click", () => openManageModal(button.dataset.manage)));
+  document.querySelectorAll("[data-delete]").forEach(button => button.addEventListener("click", () => {
+    const id = button.dataset.delete;
+    if (!confirm(`Delete complaint ${id}?`)) return;
+    complaints = complaints.filter(item => item.id !== id);
+    saveComplaints();
+    showToast(`Complaint ${id} deleted.`);
+    renderApp();
+  }));
+}
+
+function openManageModal(id) {
+  const item = complaints.find(complaint => complaint.id === id);
+  if (!item) return;
+  selectedComplaintId = id;
+  document.getElementById("modalRoot").innerHTML = `<div id="modalBackdrop" class="modal-backdrop"><div class="modal">
+    <div class="modal-header"><div><p class="eyebrow">${item.id}</p><h2>Update complaint</h2></div><button id="closeModal" class="icon-button">✕</button></div>
+    <div class="modal-summary"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.location)}</span></div>
+    <label class="field-label"><span>Status</span><select id="modalStatus">${STATUS_FLOW.map(status => `<option ${status === item.status ? "selected" : ""}>${status}</option>`).join("")}</select></label>
+    <label class="field-label"><span>Priority</span><select id="modalPriority">${["High","Medium","Low"].map(priority => `<option ${priority === item.priority ? "selected" : ""}>${priority}</option>`).join("")}</select></label>
+    <label class="field-label"><span>Assigned department</span><input id="modalDepartment" value="${escapeHtml(item.department)}"></label>
+    <label class="field-label"><span>Resolution / progress note</span><textarea id="modalNote" rows="5" placeholder="Add an official progress update.">${escapeHtml(item.resolutionNote || "")}</textarea></label>
+    <div class="button-row end"><button id="cancelModal" class="secondary-button">Cancel</button><button id="saveModal" class="primary-button">Save Changes</button></div>
+  </div></div>`;
+  const close = () => { document.getElementById("modalRoot").innerHTML = ""; selectedComplaintId = null; };
+  document.getElementById("closeModal").addEventListener("click", close);
+  document.getElementById("cancelModal").addEventListener("click", close);
+  document.getElementById("modalBackdrop").addEventListener("click", event => { if (event.target.id === "modalBackdrop") close(); });
+  document.getElementById("saveModal").addEventListener("click", () => {
+    item.status = document.getElementById("modalStatus").value;
+    item.priority = document.getElementById("modalPriority").value;
+    item.department = document.getElementById("modalDepartment").value.trim();
+    item.resolutionNote = document.getElementById("modalNote").value.trim();
+    saveComplaints();
+    showToast(`Complaint ${id} updated.`);
+    close();
+    renderApp();
+  });
+}
+
+renderApp();
