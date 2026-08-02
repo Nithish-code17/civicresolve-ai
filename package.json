@@ -1,0 +1,15 @@
+{
+  "name": "civicresolve-ai",
+  "version": "2.0.0",
+  "private": true,
+  "description": "CivicResolve AI public grievance portal",
+  "scripts": {
+    "test": "node tests/firestore-data.test.js && node tests/role-accounts.test.js && node tests/evidence-upload.test.js && node tests/evidence-api.test.js && node tests/security-rules.test.js"
+  },
+  "dependencies": {
+    "cloudinary": "2.10.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -87,6 +87,7 @@ const baseComplaint = {
   resolutionNote: "",
   rating: null,
   feedback: "",
+  evidence: [],
   duplicateId: "",
   createdByUid: "citizen-1",
   createdByEmail: "citizen@example.com",
@@ -131,11 +132,30 @@ async function run() {
   assert.equal(createWrite.reference.id, created.id);
   assert.equal(createWrite.data.createdByUid, citizen.uid);
   assert.equal(createWrite.data.status, "Submitted");
+  assert.equal(createWrite.data.evidence.length, 0);
   assert.equal(createWrite.data.statusHistory[0].changedByRole, "citizen");
+
+  const uploadedEvidence = [{
+    provider: "cloudinary",
+    complaintId: baseComplaint.id,
+    assetId: "asset-1",
+    publicId: `civicresolve/complaint-evidence/${baseComplaint.id}/${citizen.uid}/evidence-1-abc123`,
+    resourceType: "image",
+    deliveryType: "authenticated",
+    format: "jpg",
+    originalName: "streetlight.jpg",
+    contentType: "image/jpeg",
+    size: 1024,
+    uploadedAt: { toDate: () => new Date("2026-08-02T08:30:00.000Z") },
+    uploadedByUid: citizen.uid
+  }];
+  await citizenHarness.service.attachEvidence(baseComplaint.id, uploadedEvidence);
+  assert.equal(citizenHarness.writes.update[0].data.evidence.length, 1);
+  assert.equal(citizenHarness.writes.update[0].data.evidence[0].originalName, "streetlight.jpg");
 
   await citizenHarness.service.saveFeedback(baseComplaint.id, 4, "Resolved well.");
   assert.deepEqual(
-    { rating: citizenHarness.writes.update[0].data.rating, feedback: citizenHarness.writes.update[0].data.feedback },
+    { rating: citizenHarness.writes.update[1].data.rating, feedback: citizenHarness.writes.update[1].data.feedback },
     { rating: 4, feedback: "Resolved well." }
   );
 

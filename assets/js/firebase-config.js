@@ -9,7 +9,6 @@ window.CIVICRESOLVE_FIREBASE_CONFIG = {
   apiKey: "AIzaSyCqwZz8zp-13U424vFAxw1eAPCrAsf4RD8",
   authDomain: "civicresolve-ai-3d54c.firebaseapp.com",
   projectId: "civicresolve-ai-3d54c",
-  storageBucket: "civicresolve-ai-3d54c.firebasestorage.app",
   messagingSenderId: "710750969038",
   appId: "1:710750969038:web:adf4693ca2cc1d450dc49f"
 };

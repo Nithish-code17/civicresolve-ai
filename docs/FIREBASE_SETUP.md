@@ -1,16 +1,17 @@
 # Firebase Authentication Setup
 
-CivicResolve AI now supports Firebase email/password authentication, Google sign-in, password reset, Firestore-backed role profiles and real-time complaint storage.
+CivicResolve AI now supports Firebase email/password authentication, Google sign-in, password reset, Firestore-backed role profiles, real-time complaint storage and role-protected evidence metadata.
 
 ## Current Firebase environment
 
 - Project: **CivicResolve AI**
 - Project ID: `civicresolve-ai-3d54c`
-- Plan: Spark (no cost)
+- Plan: Spark (no cost); no billing upgrade is required
 - Web app: **CivicResolve AI Web**
 - Authentication: Email/Password and Google enabled
 - Firestore: Standard edition, production mode, Mumbai (`asia-south1`)
 - Security rules: Published from `firestore.rules`
+- Evidence limits: 3 files per complaint, 5 MB each, JPG/PNG/WebP/PDF only
 
 The Web App configuration is already stored in `assets/js/firebase-config.js`, and `.firebaserc` points the Firebase CLI to the correct project.
 
@@ -129,6 +130,8 @@ The `department` value for an officer must exactly match the complaint departmen
 |---|---:|---:|---:|
 | View personal dashboard | Yes | — | — |
 | Submit complaint | Yes | No | No |
+| Upload evidence | Own, before work begins | No | No |
+| View evidence | Own | Assigned department | All |
 | Track permitted complaint | Own | Assigned department | All |
 | Add status and progress note | No | Assigned department | All |
 | Change priority | No | No | Yes |
@@ -174,7 +177,23 @@ After a citizen signs in for the first time, CivicResolve checks for complaint d
 
 LocalStorage remains the active data source only when Firebase configuration is absent and demo mode is explicitly enabled.
 
-## 11. Restrict the Firebase Web API key
+## 11. Activate no-billing evidence uploads
+
+Firebase Storage is not used. Evidence is stored on Cloudinary's free plan through server-only Vercel Functions, while Firebase Authentication and Firestore remain on Spark.
+
+1. Complete `docs/EVIDENCE_SETUP.md`.
+2. Add the Cloudinary values only to Vercel Environment Variables.
+3. Deploy the latest Firestore rules:
+
+```bash
+firebase login
+firebase use civicresolve-ai-3d54c
+firebase deploy --only firestore:rules
+```
+
+Firestore stores the Cloudinary asset ID, protected public ID, media type, original filename, verified size, upload timestamp and owner UID. It never stores a permanent delivery URL. When an authorised person selects **View file**, a Vercel Function checks the Firebase ID token and reads the complaint through Firestore rules before returning a five-minute signed URL.
+
+## 12. Restrict the Firebase Web API key
 
 The Firebase Web API key identifies the project and is intentionally present in browser source, but it should still be restricted in **Google Cloud Console → APIs & Services → Credentials**:
 

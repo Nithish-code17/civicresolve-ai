@@ -27,6 +27,10 @@ CivicResolve AI is an intelligent public grievance redressal portal. Citizens ca
 - Administrator-only real-time user directory
 - Secure citizen-to-officer/admin role assignment with department scoping
 - Immediate role refresh for active sessions and append-only role audit records
+- Complaint photo/PDF evidence selection, validation and upload progress
+- Role-protected evidence viewing for owners, assigned officers and administrators
+- Evidence metadata stored in Firestore with private Cloudinary asset IDs
+- Firebase-authorized Vercel evidence APIs and five-minute signed file access
 - Responsive mobile and desktop design
 
 ## Version 2 interface enhancements
@@ -51,6 +55,10 @@ CivicResolve AI is an intelligent public grievance redressal portal. Citizens ca
 
 ```text
 civicresolve-ai/
+├── api/
+│   ├── evidence-access.js
+│   ├── evidence-delete.js
+│   └── evidence-upload.js
 ├── assets/
 │   ├── css/
 │   │   ├── auth.css
@@ -59,18 +67,24 @@ civicresolve-ai/
 │   └── js/
 │       ├── app.js
 │       ├── auth.js
+│       ├── evidence-upload.js
 │       ├── firebase-config.js
 │       ├── firestore-data.js
 │       ├── role-accounts.js
 │       └── v2-ui.js
 ├── docs/
 │   ├── ARCHITECTURE.md
+│   ├── EVIDENCE_SETUP.md
 │   ├── ENHANCEMENT_ROADMAP.md
 │   └── FIREBASE_SETUP.md
+├── server/
+│   └── evidence-provider.js
+├── .env.example
 ├── firebase.json
 ├── firestore.rules
 ├── .gitignore
 ├── index.html
+├── package.json
 ├── README.md
 └── vercel.json
 ```
@@ -78,6 +92,7 @@ civicresolve-ai/
 ## Run locally
 
 ```bash
+npm install
 python -m http.server 5500
 ```
 
@@ -93,12 +108,12 @@ This sample ID is available only when local demo mode is explicitly enabled. Pro
 
 ## Deployment
 
-The project is a static HTML, CSS and JavaScript application and can be deployed directly to Vercel. No build command is required.
+The interface is static HTML, CSS and JavaScript. Three Node.js Vercel Functions protect evidence upload, access and deletion. Vercel installs the `cloudinary` dependency automatically; no build command is required.
 
 ## Firebase environment
 
-The `enhancement-v2` branch is connected to Firebase project `civicresolve-ai-3d54c`. Email/Password and Google sign-in are enabled, and the default Firestore database uses the Mumbai (`asia-south1`) region. Complaints are stored in role-protected Firestore documents and synchronized with snapshot listeners. Follow `docs/FIREBASE_SETUP.md` to review the configuration or provision department officers and administrators.
+The `enhancement-v2` branch is connected to Firebase project `civicresolve-ai-3d54c` on the no-cost Spark plan. Email/Password and Google sign-in are enabled, and the default Firestore database uses the Mumbai (`asia-south1`) region. Complaints are stored in role-protected Firestore documents and synchronized with snapshot listeners. Evidence uses Cloudinary's free no-credit-card plan through authenticated Vercel Functions, so Firebase billing is not required. Follow `docs/EVIDENCE_SETUP.md` to add the three server-only provider values before activating uploads.
 
 ## Next phase
 
-The next major enhancement is Firebase Storage evidence upload and map-based complaint locations.
+The next major enhancement after evidence activation is map-based complaint locations and AI-assisted classification.
