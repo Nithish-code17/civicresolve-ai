@@ -106,8 +106,72 @@ service cloud.firestore {
         'duplicateId', 'createdByUid', 'createdByEmail', 'createdAt',
         'updatedAt', 'statusHistory'
       ];
-      let permitted = required.concat(['evidence', 'classification']);
+      let permitted = required.concat(['evidence', 'classification', 'sla']);
       return data.keys().hasAll(required) && data.keys().hasOnly(permitted);
+    }
+
+    function slaBaseDays(category) {
+      return category == 'Roads & Potholes' ? 5
+        : category in ['Waste Management', 'Water Supply', 'Electricity & Streetlights'] ? 2
+        : category == 'Drainage & Sewage' ? 3
+        : category in ['Public Transport', 'Parks & Public Spaces'] ? 4
+        : 5;
+    }
+
+    function slaTargetDays(category, priority) {
+      return priority == 'High'
+        ? (category == 'Roads & Potholes' || category == 'General Civic Issue' ? 3
+          : category in ['Drainage & Sewage', 'Public Transport', 'Parks & Public Spaces'] ? 2
+          : 1)
+        : priority == 'Low' ? slaBaseDays(category) + 2
+        : slaBaseDays(category);
+    }
+
+    function slaIsValid(data) {
+      let present = 'sla' in data;
+      let item = present ? data.sla : {};
+      return !present || (
+        item is map
+        && item.keys().hasAll([
+          'policyVersion', 'baseDays', 'targetDays', 'deadlineAt',
+          'deadlineDate', 'state', 'lastEvaluatedAt',
+          'dueSoonAlertedAt', 'overdueAlertedAt'
+        ])
+        && item.keys().hasOnly([
+          'policyVersion', 'baseDays', 'targetDays', 'deadlineAt',
+          'deadlineDate', 'state', 'lastEvaluatedAt',
+          'dueSoonAlertedAt', 'overdueAlertedAt'
+        ])
+        && item.policyVersion == 'civicresolve-sla-v1'
+        && item.baseDays is int
+        && item.baseDays >= 1
+        && item.baseDays <= 7
+        && item.targetDays is int
+        && item.targetDays >= 1
+        && item.targetDays <= 9
+        && item.deadlineAt is timestamp
+        && item.deadlineDate is string
+        && item.deadlineDate.size() == 10
+        && item.state in ['on-track', 'due-soon', 'overdue', 'resolved']
+        && item.lastEvaluatedAt is timestamp
+        && (item.dueSoonAlertedAt == null || item.dueSoonAlertedAt is timestamp)
+        && (item.overdueAlertedAt == null || item.overdueAlertedAt is timestamp)
+      );
+    }
+
+    function newSlaIsValid(data) {
+      let item = data.sla;
+      let targetDays = slaTargetDays(data.category, data.priority);
+      return slaIsValid(data)
+        && item.baseDays == slaBaseDays(data.category)
+        && item.targetDays == targetDays
+        && item.deadlineDate == data.expectedResolutionDate
+        && item.state == 'on-track'
+        && item.lastEvaluatedAt == request.time
+        && item.dueSoonAlertedAt == null
+        && item.overdueAlertedAt == null
+        && item.deadlineAt >= request.time + duration.value(targetDays, 'd') - duration.value(10, 'm')
+        && item.deadlineAt <= request.time + duration.value(targetDays, 'd') + duration.value(10, 'm');
     }
 
     function classificationIsValid(data) {
@@ -254,6 +318,7 @@ service cloud.firestore {
         && data.statusHistory is list
         && data.statusHistory.size() >= 1
         && data.statusHistory.size() <= 100
+        && slaIsValid(data)
         && classificationIsValid(data)
         && evidenceIsValid(data, complaintId);
     }
@@ -381,6 +446,8 @@ service cloud.firestore {
         && request.resource.data.feedback == ''
         && request.resource.data.evidence is list
         && request.resource.data.evidence.size() == 0
+        && 'sla' in request.resource.data
+        && newSlaIsValid(request.resource.data)
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time
         && initialHistoryIsValid(request.resource.data);

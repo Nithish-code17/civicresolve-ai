@@ -34,6 +34,9 @@ CivicResolve AI is an intelligent public grievance redressal portal. Citizens ca
 - Gemini complaint classification with structured category, priority, confidence and reasoning
 - Server-validated department routing with deterministic safety and availability fallback rules
 - Privacy-minimised AI requests that exclude account details, exact location and evidence
+- Priority-aware automatic SLA deadlines with immutable policy snapshots
+- Role-scoped due-soon and overdue alerts, filters, badges and analytics
+- Protected daily Vercel SLA monitor with minimal Firestore writes
 - Responsive mobile and desktop design
 
 ## Version 2 interface enhancements
@@ -62,7 +65,9 @@ civicresolve-ai/
 │   ├── evidence-access.js
 │   ├── evidence-delete.js
 │   ├── evidence-upload.js
-│   └── classify-complaint.js
+│   ├── classify-complaint.js
+│   └── cron/
+│       └── sla-monitor.js
 ├── assets/
 │   ├── css/
 │   │   ├── auth.css
@@ -77,16 +82,19 @@ civicresolve-ai/
 │       ├── firebase-config.js
 │       ├── firestore-data.js
 │       ├── role-accounts.js
+│       ├── sla-policy.js
 │       └── v2-ui.js
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── AI_CLASSIFICATION_SETUP.md
 │   ├── EVIDENCE_SETUP.md
 │   ├── ENHANCEMENT_ROADMAP.md
-│   └── FIREBASE_SETUP.md
+│   ├── FIREBASE_SETUP.md
+│   └── SLA_SETUP.md
 ├── server/
 │   ├── ai-classifier.js
-│   └── evidence-provider.js
+│   ├── evidence-provider.js
+│   └── sla-monitor.js
 ├── .env.example
 ├── firebase.json
 ├── firestore.rules
@@ -116,7 +124,7 @@ This sample ID is available only when local demo mode is explicitly enabled. Pro
 
 ## Deployment
 
-The interface is static HTML, CSS and JavaScript. Node.js Vercel Functions protect evidence operations and Gemini classification. Vercel installs the `cloudinary` dependency automatically; no frontend build command is required.
+The interface is static HTML, CSS and JavaScript. Node.js Vercel Functions protect evidence operations, Gemini classification and the daily SLA monitor. Vercel installs the `cloudinary` dependency automatically; no frontend build command is required.
 
 ## Firebase environment
 
@@ -126,6 +134,10 @@ The `enhancement-v2` branch is connected to Firebase project `civicresolve-ai-3d
 
 Gemini classification uses the server-only `GEMINI_API_KEY` Vercel variable and defaults to `gemini-3.5-flash-lite`. The application never sends account details, exact location or evidence to Gemini, and complaint submission automatically falls back to deterministic routing rules. Follow `docs/AI_CLASSIFICATION_SETUP.md` to activate the provider.
 
+## SLA environment
+
+The SLA policy creates a deadline when a complaint is submitted. The browser continuously derives On track, Due soon, Overdue or Resolved state, while a protected Vercel Cron Job persists state transitions every day at 08:00 IST. Follow `docs/SLA_SETUP.md` to configure `CRON_SECRET` and the two server-only Firebase service-account values. This workflow remains compatible with Firebase Spark and Vercel Hobby.
+
 ## Next phase
 
-The next major enhancement is map-based complaint location selection and notifications.
+The next major enhancement is map-based complaint location selection and officer assignment.

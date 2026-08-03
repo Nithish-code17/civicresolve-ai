@@ -85,13 +85,23 @@
     const evidence = Array.isArray(data.evidence)
       ? data.evidence.map(item => ({ ...item, uploadedAt: dateValue(item.uploadedAt, true) }))
       : [];
+    const sla = data.sla && typeof data.sla === "object"
+      ? {
+          ...data.sla,
+          deadlineAt: dateValue(data.sla.deadlineAt, true),
+          lastEvaluatedAt: dateValue(data.sla.lastEvaluatedAt, true),
+          dueSoonAlertedAt: dateValue(data.sla.dueSoonAlertedAt, true),
+          overdueAlertedAt: dateValue(data.sla.overdueAlertedAt, true)
+        }
+      : null;
     return {
       ...data,
       id: data.id || documentId,
       createdAt: dateValue(data.createdAt),
       updatedAt: dateValue(data.updatedAt, true),
       statusHistory: history,
-      evidence
+      evidence,
+      sla
     };
   }
 
@@ -195,21 +205,30 @@
     };
   }
 
+  function slaDraft(category, priority, now = new Date()) {
+    if (!window.CivicSlaPolicy) throw new Error("The complaint SLA policy is unavailable.");
+    return window.CivicSlaPolicy.createRecord({ category, priority }, now);
+  }
+
   async function createComplaint(input) {
     const current = profile();
     if (!current || current.role !== "citizen") throw new Error("Only citizen accounts can submit complaints.");
     const today = new Date().toISOString().slice(0, 10);
+    const priority = validChoice(input.priority, VALID_PRIORITIES, "Low");
 
     if (isDemoMode()) {
       const id = nextDemoId();
+      const sla = slaDraft(input.category, priority);
       const complaint = normaliseComplaint({
         ...input,
         id,
         citizenName: current.displayName,
         email: current.email,
         status: "Submitted",
-        priority: validChoice(input.priority, VALID_PRIORITIES, "Low"),
+        priority,
         classification: classificationRecord(input.classification, input.title),
+        expectedResolutionDate: sla.deadlineDate,
+        sla,
         resolutionNote: "",
         rating: null,
         feedback: "",
@@ -228,6 +247,12 @@
     const { db, sdk } = firebaseServices();
     const id = newCloudId(sdk, db);
     const clientTimestamp = sdk.Timestamp.now();
+    const draft = slaDraft(input.category, priority, clientTimestamp.toDate());
+    const sla = {
+      ...draft,
+      deadlineAt: sdk.Timestamp.fromDate(new Date(draft.deadlineAt)),
+      lastEvaluatedAt: sdk.serverTimestamp()
+    };
     const data = {
       id,
       citizenName: current.displayName,
@@ -238,10 +263,11 @@
       location: String(input.location || "").trim(),
       category: String(input.category || "General Civic Issue"),
       department: String(input.department || "General Administration"),
-      priority: validChoice(input.priority, VALID_PRIORITIES, "Low"),
+      priority,
       classification: classificationRecord(input.classification, input.title),
       status: "Submitted",
-      expectedResolutionDate: String(input.expectedResolutionDate || today),
+      expectedResolutionDate: draft.deadlineDate,
+      sla,
       resolutionNote: "",
       rating: null,
       feedback: "",
@@ -254,7 +280,12 @@
       statusHistory: [historyEntry("Submitted", "Complaint submitted by citizen.", clientTimestamp)]
     };
     await sdk.setDoc(sdk.doc(db, "complaints", id), data);
-    return normaliseComplaint({ ...data, createdAt: today, updatedAt: new Date().toISOString() }, id);
+    return normaliseComplaint({
+      ...data,
+      sla: { ...sla, lastEvaluatedAt: clientTimestamp },
+      createdAt: today,
+      updatedAt: new Date().toISOString()
+    }, id);
   }
 
   async function attachEvidence(id, evidenceItems) {
