@@ -51,19 +51,19 @@
 
 ## Phase 5 — Evidence and location
 
-- Upload complaint evidence to authenticated Cloudinary assets through Firebase-authorized Vercel Functions
-- Validate image and document files
+- Upload complaint evidence to authenticated Cloudinary assets through Firebase-authorized Vercel Functions — implemented
+- Validate image and document files — implemented
 - Add map-based location selection
 - Store address, latitude and longitude
 - Display complaint markers for administrators
 
 ## Phase 6 — Workflow intelligence
 
-- Add complete status history
-- Add SLA deadlines and overdue alerts
+- Add complete status history — implemented
+- Add SLA deadlines and overdue alerts — implemented locally; scheduler activation pending
 - Add officer assignment
 - Add duplicate complaint detection using location and similarity
-- Add in-app notifications
+- Add in-app SLA notifications — implemented
 
 ## Phase 7 — AI assistance
 

@@ -4,6 +4,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const source = fs.readFileSync(path.join(__dirname, "../assets/js/firestore-data.js"), "utf8");
+const slaPolicy = require("../assets/js/sla-policy");
 
 function createLocalStorage() {
   const values = new Map();
@@ -17,7 +18,11 @@ function createLocalStorage() {
 function createHarness(userProfile, snapshotData = []) {
   const writes = { set: [], update: [], delete: [], queries: [] };
   const fixedDate = new Date("2026-08-02T08:30:00.000Z");
-  const timestamp = () => ({ toDate: () => fixedDate });
+  const timestampFor = date => ({
+    toDate: () => new Date(date),
+    toMillis: () => new Date(date).getTime()
+  });
+  const timestamp = () => timestampFor(fixedDate);
   const sdk = {
     collection: (_db, name) => ({ type: "collection", name }),
     doc: (...args) => args.length === 1
@@ -33,7 +38,7 @@ function createHarness(userProfile, snapshotData = []) {
       return () => {};
     },
     serverTimestamp: () => ({ serverTimestamp: true }),
-    Timestamp: { now: timestamp },
+    Timestamp: { now: timestamp, fromDate: timestampFor },
     setDoc: async (reference, data) => { writes.set.push({ reference, data }); },
     getDoc: async reference => ({
       exists: () => true,
@@ -43,6 +48,7 @@ function createHarness(userProfile, snapshotData = []) {
     deleteDoc: async reference => { writes.delete.push(reference); }
   };
   const window = {
+    CivicSlaPolicy: slaPolicy,
     CivicAuth: {
       getProfile: () => userProfile,
       getFirebaseServices: () => ({ db: {}, sdk }),
@@ -144,6 +150,11 @@ async function run() {
   assert.equal(createWrite.data.evidence.length, 0);
   assert.equal(createWrite.data.classification.source, "gemini");
   assert.equal(createWrite.data.classification.confidence, 91);
+  assert.equal(createWrite.data.sla.policyVersion, "civicresolve-sla-v1");
+  assert.equal(createWrite.data.sla.baseDays, 2);
+  assert.equal(createWrite.data.sla.targetDays, 1);
+  assert.equal(createWrite.data.expectedResolutionDate, "2026-08-03");
+  assert.equal(createWrite.data.sla.deadlineAt.toDate().toISOString(), "2026-08-03T08:30:00.000Z");
   assert.equal(createWrite.data.statusHistory[0].changedByRole, "citizen");
 
   const uploadedEvidence = [{

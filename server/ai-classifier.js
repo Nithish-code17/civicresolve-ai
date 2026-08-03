@@ -1,6 +1,7 @@
 "use strict";
 
 const rules = require("../assets/js/classification-rules");
+const slaPolicy = require("../assets/js/sla-policy");
 
 const DEFAULT_FIREBASE_PROJECT_ID = "civicresolve-ai-3d54c";
 const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
@@ -222,7 +223,7 @@ function normaliseModelClassification(output, input, model) {
   return {
     category: route.category,
     department: route.department,
-    days: route.days,
+    days: slaPolicy.daysFor(route.category, priority),
     priority,
     source: "gemini",
     model,

@@ -131,7 +131,7 @@ Complaint evidence uses a three-service transaction:
 
 The Firebase project remains on Spark. Cloudinary credentials are stored only as encrypted Vercel environment values, and the production citizen-to-officer evidence flow is verified.
 
-### Stage 7 — AI classification implementation complete; provider activation pending
+### Stage 7 — complete
 
 Complaint intelligence uses a secure hybrid pipeline:
 
@@ -146,7 +146,24 @@ Complaint intelligence uses a secure hybrid pipeline:
 - Timeouts, free-tier limits, provider failures and missing configuration fall back to the rules without blocking complaint submission.
 - Firestore records the classification source, model, confidence, explanation and review flags for auditability.
 
-Activation requires a Gemini authorization key stored as the server-only `GEMINI_API_KEY` Vercel variable. No key is committed or sent to the browser.
+The Gemini authorization key is stored as the server-only `GEMINI_API_KEY` Vercel variable. No key is committed or sent to the browser.
+
+### Stage 8 — SLA deadlines and overdue alerts implemented; scheduler activation pending
+
+Complaint accountability uses a shared, versioned SLA policy:
+
+- Each category defines a base service window.
+- High priority uses half the base window, rounded up; Medium uses the base window; Low adds two days.
+- New complaints snapshot the policy version, base days, target days and exact deadline.
+- Firestore rules validate the policy values and allow only a ten-minute client/server clock tolerance.
+- Official status updates cannot alter the original SLA snapshot.
+- The interface derives On track, Due soon, Overdue and Resolved state in real time.
+- Dashboards, management tables, tracking pages, analytics and the notification bell show only alerts permitted for the current role.
+- A protected Vercel Cron Job runs daily at 02:30 UTC (08:00 IST), scans at most 500 complaints and writes only state transitions.
+- Due-soon and overdue alert timestamps are persisted once, and resolved complaints stop generating alerts.
+- The scheduler authenticates with `CRON_SECRET` and a server-only Firebase service account; no privileged credential reaches browser code.
+
+Activation requires the three values documented in `SLA_SETUP.md`. Firebase remains on Spark and Vercel uses its once-daily Hobby schedule.
 
 ## Development principles
 

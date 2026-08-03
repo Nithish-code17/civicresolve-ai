@@ -18,6 +18,11 @@
     return window.CivicClassificationRules;
   }
 
+  function slaService() {
+    if (!window.CivicSlaPolicy) throw new Error("The SLA policy is unavailable.");
+    return window.CivicSlaPolicy;
+  }
+
   function concise(value, maximum, fallback = "") {
     const text = String(value || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
     return (text || fallback).slice(0, maximum);
@@ -35,6 +40,7 @@
     const result = rulesService().analyse(safeInput(input));
     return {
       ...result,
+      days: slaService().daysFor(result.category, result.priority),
       available: false,
       fallbackReason: error?.code || "ai/not-requested"
     };
@@ -49,7 +55,7 @@
     return {
       category: route.category,
       department: route.department,
-      days: route.days,
+      days: slaService().daysFor(route.category, result.priority),
       priority: result.priority,
       source: "gemini",
       model: concise(result.model, 80, "gemini"),

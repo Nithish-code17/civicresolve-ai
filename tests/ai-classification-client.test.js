@@ -6,6 +6,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const rulesSource = fs.readFileSync(path.join(__dirname, "../assets/js/classification-rules.js"), "utf8");
+const slaSource = fs.readFileSync(path.join(__dirname, "../assets/js/sla-policy.js"), "utf8");
 const clientSource = fs.readFileSync(path.join(__dirname, "../assets/js/ai-classification.js"), "utf8");
 
 function createHarness(fetchImpl) {
@@ -38,6 +39,7 @@ function createHarness(fetchImpl) {
     Map
   });
   vm.runInContext(rulesSource, context, { filename: "classification-rules.js" });
+  vm.runInContext(slaSource, context, { filename: "sla-policy.js" });
   vm.runInContext(clientSource, context, { filename: "ai-classification.js" });
   return window.CivicAI;
 }

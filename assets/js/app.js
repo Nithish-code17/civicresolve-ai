@@ -184,6 +184,87 @@ function statusSlug(status) { return status.toLowerCase().replaceAll(" ", "-"); 
 function priorityBadge(priority) { return `<span class="badge priority-${priority.toLowerCase()}">${escapeHtml(priority)}</span>`; }
 function statusBadge(status) { return `<span class="badge status-${statusSlug(status)}">${escapeHtml(status)}</span>`; }
 
+function slaAssessment(item, now = new Date()) {
+  if (!window.CivicSlaPolicy) {
+    return { state: "on-track", label: "SLA pending", deadlineAt: "", remainingMs: null };
+  }
+  return window.CivicSlaPolicy.assess(item, now);
+}
+
+function slaStateLabel(state) {
+  return {
+    "on-track": "On track",
+    "due-soon": "Due soon",
+    overdue: "Overdue",
+    resolved: "Resolved"
+  }[state] || "On track";
+}
+
+function slaBadge(item) {
+  const assessment = slaAssessment(item);
+  const title = assessment.deadlineAt ? `Deadline ${formatDateTime(assessment.deadlineAt)}` : "Deadline pending";
+  return `<span class="sla-badge sla-${assessment.state}" title="${escapeHtml(title)}">${escapeHtml(slaStateLabel(assessment.state))} · ${escapeHtml(assessment.label)}</span>`;
+}
+
+function slaAlerts(items = visibleComplaints()) {
+  return items
+    .map(item => ({ item, assessment: slaAssessment(item) }))
+    .filter(entry => ["due-soon", "overdue"].includes(entry.assessment.state))
+    .sort((left, right) => {
+      if (left.assessment.state !== right.assessment.state) return left.assessment.state === "overdue" ? -1 : 1;
+      return new Date(left.assessment.deadlineAt).getTime() - new Date(right.assessment.deadlineAt).getTime();
+    });
+}
+
+function renderSlaAlertBanner(items = visibleComplaints()) {
+  const alerts = slaAlerts(items);
+  if (!alerts.length) return "";
+  const overdue = alerts.filter(entry => entry.assessment.state === "overdue");
+  const urgent = alerts[0];
+  const countLabel = `${alerts.length} complaint${alerts.length === 1 ? "" : "s"}`;
+  const summary = overdue.length
+    ? `${overdue.length} overdue and ${alerts.length - overdue.length} due soon.`
+    : `${countLabel} due within 24 hours.`;
+  return `<section class="sla-alert-banner ${overdue.length ? "has-overdue" : ""}">
+    <div class="sla-alert-icon">${overdue.length ? "!" : "◷"}</div>
+    <div><p class="eyebrow">Automatic SLA alert</p><h2>${escapeHtml(summary)}</h2><p>Review most urgent: <strong>${escapeHtml(urgent.item.id)}</strong> · ${escapeHtml(urgent.item.title)} · ${escapeHtml(urgent.assessment.label)}.</p></div>
+    <button class="secondary-button small" type="button" data-sla-open="${escapeHtml(urgent.item.id)}">Review most urgent</button>
+  </section>`;
+}
+
+function renderComplaintSlaNotice(item) {
+  const assessment = slaAssessment(item);
+  const deadline = assessment.deadlineAt ? formatDateTime(assessment.deadlineAt) : "not available";
+  const messages = {
+    "on-track": `The case is within its service window and currently has ${assessment.label.toLowerCase()}.`,
+    "due-soon": `The SLA deadline is approaching. The assigned department should provide an update before ${deadline}.`,
+    overdue: "This unresolved complaint has passed its SLA deadline and requires immediate official attention.",
+    resolved: "This complaint is resolved and will produce no further overdue alerts."
+  };
+  const symbol = assessment.state === "overdue" ? "!" : assessment.state === "due-soon" ? "◷" : "✓";
+  return `<div class="sla-case-notice sla-${assessment.state}"><span>${symbol}</span><div><strong>SLA deadline: ${escapeHtml(deadline)}</strong><p>${escapeHtml(messages[assessment.state] || messages["on-track"])}</p></div>${slaBadge(item)}</div>`;
+}
+
+window.CivicSlaAlerts = Object.freeze({
+  list() {
+    return slaAlerts().map(({ item, assessment }) => ({
+      id: item.id,
+      title: item.title,
+      department: item.department,
+      state: assessment.state,
+      label: assessment.label,
+      deadlineAt: assessment.deadlineAt
+    }));
+  },
+  open(id) {
+    const item = visibleComplaints().find(complaint => complaint.id === id);
+    if (!item || !canViewComplaint(item)) return;
+    trackingResult = item;
+    trackingError = "";
+    navigate("track");
+  }
+});
+
 function getStats(items = complaints) {
   const total = items.length;
   const resolved = items.filter(item => item.status === "Resolved").length;
@@ -438,6 +519,7 @@ function renderDashboard() {
   const scopeLabel = isCitizen() ? "Your registered issues" : isOfficer() ? `Assigned to ${authProfile()?.department || "your department"}` : "All registered issues";
   return `<div class="page-stack">
     ${dashboardHero()}
+    ${renderSlaAlertBanner(scopedComplaints)}
     <section class="stats-grid">
       ${statCard("Total Complaints", stats.total, "☷", scopeLabel)}
       ${statCard("Pending", stats.pending, "◷", "Submitted or under review", "warning")}
@@ -474,10 +556,10 @@ function renderBars(data, fixedColor = null) {
 
 function complaintTable(items, compact = false) {
   if (!items.length) return '<div class="empty-table">⌕<p>No complaints match the selected filters.</p></div>';
-  return `<div class="table-scroll"><table class="data-table"><thead><tr><th>ID</th><th>Complaint</th><th>Category</th><th>Priority</th><th>Status</th>${compact ? "" : "<th>Actions</th>"}</tr></thead><tbody>${items.map(item => `<tr>
+  return `<div class="table-scroll"><table class="data-table"><thead><tr><th>ID</th><th>Complaint</th><th>Category</th><th>Priority</th><th>Status</th><th>SLA</th>${compact ? "" : "<th>Actions</th>"}</tr></thead><tbody>${items.map(item => `<tr>
     <td><strong>${escapeHtml(item.id)}</strong><span class="table-subtext">${formatDate(item.createdAt)}</span></td>
     <td><strong>${escapeHtml(item.title)}</strong><span class="table-subtext">${escapeHtml(item.location)}${item.evidence?.length ? ` · ${item.evidence.length} evidence file${item.evidence.length === 1 ? "" : "s"}` : ""}</span></td>
-    <td>${escapeHtml(item.category)}</td><td>${priorityBadge(item.priority)}</td><td>${statusBadge(item.status)}</td>
+    <td>${escapeHtml(item.category)}</td><td>${priorityBadge(item.priority)}</td><td>${statusBadge(item.status)}</td><td>${slaBadge(item)}</td>
     ${compact ? "" : `<td><div class="table-actions">${window.CivicAuth.canManageComplaint(item) ? `<button class="table-button" data-manage="${item.id}">Manage</button>` : ""}${window.CivicAuth.canDeleteComplaint() ? `<button class="delete-button" data-delete="${item.id}" title="Delete complaint">×</button>` : ""}</div></td>`}
   </tr>`).join("")}</tbody></table></div>`;
 }
@@ -631,7 +713,7 @@ function renderSubmissionSuccess(item) {
     ? `Gemini AI · ${item.classification.confidence}% confidence`
     : "Smart rules fallback";
   return `<div class="success-page"><div class="success-icon">✓</div><p class="eyebrow">Complaint registered successfully</p><h2>${item.id}</h2><p>Save this grievance ID. It is required to track the complaint.</p>
-    <div class="result-card">${resultRow("Classification", classificationLabel)}${resultRow("Category", item.category)}${resultRow("Department", item.department)}${resultRow("Priority", item.priority)}${resultRow("Evidence", `${item.evidence?.length || 0} file${item.evidence?.length === 1 ? "" : "s"}`)}${resultRow("Expected resolution", formatDate(item.expectedResolutionDate))}</div>
+    <div class="result-card">${resultRow("Classification", classificationLabel)}${resultRow("Category", item.category)}${resultRow("Department", item.department)}${resultRow("Priority", item.priority)}${resultRow("Evidence", `${item.evidence?.length || 0} file${item.evidence?.length === 1 ? "" : "s"}`)}${resultRow("SLA deadline", formatDateTime(slaAssessment(item).deadlineAt || item.expectedResolutionDate))}</div>
     ${item.duplicateId ? `<div class="alert warning">⚠ <span>A similar unresolved complaint may already exist: <strong>${item.duplicateId}</strong>.</span></div>` : ""}
     ${evidenceUploadWarning ? `<div class="alert warning evidence-warning">⚠ <span><strong>Complaint saved without evidence.</strong> ${escapeHtml(evidenceUploadWarning)} You can add the files later from Track Complaint while the case is awaiting review.</span></div>` : ""}
     <div class="button-row center"><button class="primary-button" data-success-go="track">⌕ Track Complaint</button><button class="secondary-button" id="submitAnother">Submit Another</button></div></div>`;
@@ -655,8 +737,9 @@ function renderTrackingResult(item) {
   return `<section class="tracking-result">
     <div class="tracking-header"><div><p class="eyebrow">${escapeHtml(item.id)}</p><h2>${escapeHtml(item.title)}</h2>${statusBadge(item.status)}</div>${priorityBadge(item.priority + " priority").replace(`priority-${item.priority.toLowerCase()} priority`, `priority-${item.priority.toLowerCase()}`)}</div>
     <div class="details-grid">
-      ${detailCard("◉", "Citizen", item.citizenName)}${detailCard("⌖", "Location", item.location)}${detailCard("▤", "Department", item.department)}${detailCard("◷", "Expected resolution", formatDate(item.expectedResolutionDate))}
+      ${detailCard("◉", "Citizen", item.citizenName)}${detailCard("⌖", "Location", item.location)}${detailCard("▤", "Department", item.department)}${detailCard("◷", "SLA deadline", formatDateTime(slaAssessment(item).deadlineAt || item.expectedResolutionDate))}
     </div>
+    ${renderComplaintSlaNotice(item)}
     <div class="description-block"><strong>Complaint description</strong><p>${escapeHtml(item.description)}</p></div>
     ${renderEvidenceSection(item)}
     <div class="timeline-card"><h3>Status timeline</h3><div class="timeline">${STATUS_FLOW.map((status, index) => `<div class="timeline-step ${index <= currentIndex ? "complete" : ""} ${index === currentIndex ? "current" : ""}"><div class="timeline-marker">${index <= currentIndex ? "✓" : "○"}</div><span>${status}</span></div>`).join("")}</div></div>
@@ -773,7 +856,8 @@ function renderAdminPage() {
   const subtitle = isOfficer() ? `Showing complaints assigned to ${authProfile()?.department || "your department"}` : "Search, assign and update citizen grievances";
   return `<div class="page-stack">
     <section class="stats-grid compact-stats">${statCard("Total", stats.total, "☷")}${statCard("High Priority", stats.highPriority, "⚠", "", "danger")}${statCard("Active Work", stats.inProgress, "◉", "", "info")}${statCard("Resolved", stats.resolved, "✓", "", "success")}</section>
-    ${panel("Complaint management", subtitle, `<div class="filter-row"><div class="search-box">⌕<input id="adminSearch" placeholder="Search ID, title, citizen or location"></div><select id="statusFilter"><option>All</option>${STATUS_FLOW.map(s => `<option>${s}</option>`).join("")}</select><select id="priorityFilter"><option>All</option><option>High</option><option>Medium</option><option>Low</option></select></div><div id="adminTable">${complaintTable(managedComplaints)}</div>`, window.CivicComplaints.isDemoMode() && isAdministrator() ? '<button id="resetDemo" class="secondary-button small">Reset demo data</button>' : '<span class="role-badge">Live Firestore</span>')}
+    ${renderSlaAlertBanner(managedComplaints)}
+    ${panel("Complaint management", subtitle, `<div class="filter-row sla-filter-row"><div class="search-box">⌕<input id="adminSearch" placeholder="Search ID, title, citizen or location"></div><select id="statusFilter"><option>All</option>${STATUS_FLOW.map(s => `<option>${s}</option>`).join("")}</select><select id="priorityFilter"><option>All</option><option>High</option><option>Medium</option><option>Low</option></select><select id="slaFilter"><option value="All">All SLA states</option><option value="overdue">Overdue</option><option value="due-soon">Due soon</option><option value="on-track">On track</option><option value="resolved">Resolved</option></select></div><div id="adminTable">${complaintTable(managedComplaints)}</div>`, window.CivicComplaints.isDemoMode() && isAdministrator() ? '<button id="resetDemo" class="secondary-button small">Reset demo data</button>' : '<span class="role-badge">Live Firestore</span>')}
   </div>`;
 }
 
@@ -885,6 +969,7 @@ function renderRoleAccountsPage() {
 
 function attachPageEvents() {
   document.getElementById("retryComplaintSync")?.addEventListener("click", () => startComplaintSync(true));
+  document.querySelectorAll("[data-sla-open]").forEach(button => button.addEventListener("click", () => window.CivicSlaAlerts.open(button.dataset.slaOpen)));
   document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click", () => navigate(button.dataset.go)));
 
   if (activePage === "accounts") {
@@ -1161,17 +1246,20 @@ function attachAdminEvents() {
   const search = document.getElementById("adminSearch");
   const status = document.getElementById("statusFilter");
   const priority = document.getElementById("priorityFilter");
+  const sla = document.getElementById("slaFilter");
   const refresh = () => {
     const text = search.value.toLowerCase();
     const filtered = visibleComplaints().filter(item => `${item.id} ${item.title} ${item.citizenName} ${item.location}`.toLowerCase().includes(text)
       && (status.value === "All" || item.status === status.value)
-      && (priority.value === "All" || item.priority === priority.value));
+      && (priority.value === "All" || item.priority === priority.value)
+      && (!sla || sla.value === "All" || slaAssessment(item).state === sla.value));
     document.getElementById("adminTable").innerHTML = complaintTable(filtered);
     attachTableEvents();
   };
   search.addEventListener("input", refresh);
   status.addEventListener("change", refresh);
   priority.addEventListener("change", refresh);
+  sla?.addEventListener("change", refresh);
   document.getElementById("resetDemo")?.addEventListener("click", () => {
     if (!isAdministrator()) return;
     if (!confirm("Reset all data to the original demo complaints?")) return;

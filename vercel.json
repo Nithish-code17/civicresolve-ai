@@ -1,4 +1,10 @@
 {
   "cleanUrls": true,
-  "trailingSlash": false
+  "trailingSlash": false,
+  "crons": [
+    {
+      "path": "/api/cron/sla-monitor",
+      "schedule": "30 2 * * *"
+    }
+  ]
 }

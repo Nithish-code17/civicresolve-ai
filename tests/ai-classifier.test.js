@@ -90,6 +90,7 @@ async function run() {
   assert.equal(response.body.classification.category, "Electricity & Streetlights");
   assert.equal(response.body.classification.department, "Electricity Department");
   assert.equal(response.body.classification.priority, "High", "Safety rules must be able to raise AI priority.");
+  assert.equal(response.body.classification.days, 1, "High-priority electricity complaints use the accelerated SLA.");
   assert.equal(response.body.classification.safetyOverride, true);
   assert.equal(response.body.classification.source, "gemini");
   assert.equal(response.body.classification.model, DEFAULT_GEMINI_MODEL);
