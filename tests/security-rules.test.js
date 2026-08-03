@@ -8,6 +8,8 @@ const firebaseConfig = JSON.parse(fs.readFileSync(path.join(root, "firebase.json
 const evidenceServer = fs.readFileSync(path.join(root, "server/evidence-provider.js"), "utf8");
 const aiServer = fs.readFileSync(path.join(root, "server/ai-classifier.js"), "utf8");
 const slaServer = fs.readFileSync(path.join(root, "server/sla-monitor.js"), "utf8");
+const complaintServer = fs.readFileSync(path.join(root, "server/complaint-creator.js"), "utf8");
+const complaintApi = fs.readFileSync(path.join(root, "api/create-complaint.js"), "utf8");
 const vercelConfig = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
 const gitignore = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
 
@@ -54,6 +56,14 @@ assert.match(slaServer, /timingSafeEqual/);
 assert.match(slaServer, /FIREBASE_ADMIN_PRIVATE_KEY/);
 assert.match(slaServer, /https:\/\/www\.googleapis\.com\/auth\/datastore/);
 assert.match(slaServer, /MAX_COMPLAINTS_PER_RUN = 500/);
+assert.match(complaintServer, /serviceAccountAssertion/);
+assert.match(complaintServer, /readCitizenProfile/);
+assert.match(complaintServer, /profile\.role !== "citizen"/);
+assert.match(complaintServer, /classificationRules\.ruleForCategory/);
+assert.match(complaintServer, /slaPolicy\.createRecord/);
+assert.match(complaintServer, /server-access-token|Authorization: `Bearer \$\{token\}`|Authorization: `Bearer \$\{serviceToken\}`/);
+assert.match(complaintApi, /createComplaintHandler/);
+assert.doesNotMatch(complaintServer, /PRIVATE KEY-----|server-only-gemini-key|protected-cron-secret/);
 assert.equal(vercelConfig.crons[0].path, "/api/cron/sla-monitor");
 assert.equal(vercelConfig.crons[0].schedule, "30 2 * * *");
 assert.doesNotMatch(aiServer, /citizenName|createdByEmail|phone:/);

@@ -21,6 +21,7 @@ CivicResolve AI is an intelligent public grievance redressal portal. Citizens ca
 - Citizen rating and feedback
 - Dashboard and analytics charts
 - Cloud Firestore complaint persistence
+- Authenticated server-side complaint creation with server-stamped SLA deadlines
 - Real-time citizen, department-officer and administrator views
 - Timestamped complaint status history
 - One-time migration of eligible citizen LocalStorage complaints
@@ -66,6 +67,7 @@ civicresolve-ai/
 │   ├── evidence-delete.js
 │   ├── evidence-upload.js
 │   ├── classify-complaint.js
+│   ├── create-complaint.js
 │   └── cron/
 │       └── sla-monitor.js
 ├── assets/
@@ -93,6 +95,7 @@ civicresolve-ai/
 │   └── SLA_SETUP.md
 ├── server/
 │   ├── ai-classifier.js
+│   ├── complaint-creator.js
 │   ├── evidence-provider.js
 │   └── sla-monitor.js
 ├── .env.example
@@ -124,7 +127,7 @@ This sample ID is available only when local demo mode is explicitly enabled. Pro
 
 ## Deployment
 
-The interface is static HTML, CSS and JavaScript. Node.js Vercel Functions protect evidence operations, Gemini classification and the daily SLA monitor. Vercel installs the `cloudinary` dependency automatically; no frontend build command is required.
+The interface is static HTML, CSS and JavaScript. Node.js Vercel Functions protect complaint creation, evidence operations, Gemini classification and the daily SLA monitor. Vercel installs the `cloudinary` dependency automatically; no frontend build command is required.
 
 ## Firebase environment
 
@@ -136,7 +139,7 @@ Gemini classification uses the server-only `GEMINI_API_KEY` Vercel variable and 
 
 ## SLA environment
 
-The SLA policy creates a deadline when a complaint is submitted. The browser continuously derives On track, Due soon, Overdue or Resolved state, while a protected Vercel Cron Job persists state transitions every day at 08:00 IST. Follow `docs/SLA_SETUP.md` to configure `CRON_SECRET` and the two server-only Firebase service-account values. This workflow remains compatible with Firebase Spark and Vercel Hobby.
+The SLA policy creates a server-timestamped deadline when a complaint is submitted through the authenticated Vercel API. The browser continuously derives On track, Due soon, Overdue or Resolved state, while a protected Vercel Cron Job persists state transitions every day at 08:00 IST. Follow `docs/SLA_SETUP.md` to configure `CRON_SECRET` and the two server-only Firebase service-account values. This workflow remains compatible with Firebase Spark and Vercel Hobby.
 
 ## Next phase
 
