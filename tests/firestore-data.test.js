@@ -124,6 +124,15 @@ async function run() {
     category: "Electricity & Streetlights",
     department: "Electricity Department",
     priority: "High",
+    classification: {
+      source: "gemini",
+      model: "gemini-3.5-flash-lite",
+      confidence: 91,
+      summary: "A school-area streetlight is not working.",
+      reasoning: "The issue concerns public electrical infrastructure.",
+      reviewRequired: false,
+      safetyOverride: false
+    },
     expectedResolutionDate: "2026-08-04",
     duplicateId: ""
   });
@@ -133,6 +142,8 @@ async function run() {
   assert.equal(createWrite.data.createdByUid, citizen.uid);
   assert.equal(createWrite.data.status, "Submitted");
   assert.equal(createWrite.data.evidence.length, 0);
+  assert.equal(createWrite.data.classification.source, "gemini");
+  assert.equal(createWrite.data.classification.confidence, 91);
   assert.equal(createWrite.data.statusHistory[0].changedByRole, "citizen");
 
   const uploadedEvidence = [{

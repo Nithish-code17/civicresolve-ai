@@ -106,8 +106,39 @@ service cloud.firestore {
         'duplicateId', 'createdByUid', 'createdByEmail', 'createdAt',
         'updatedAt', 'statusHistory'
       ];
-      let permitted = required.concat(['evidence']);
+      let permitted = required.concat(['evidence', 'classification']);
       return data.keys().hasAll(required) && data.keys().hasOnly(permitted);
+    }
+
+    function classificationIsValid(data) {
+      let present = 'classification' in data;
+      let item = present ? data.classification : {};
+      return !present || (
+        item is map
+        && item.keys().hasAll([
+          'source', 'model', 'confidence', 'summary', 'reasoning',
+          'reviewRequired', 'safetyOverride'
+        ])
+        && item.keys().hasOnly([
+          'source', 'model', 'confidence', 'summary', 'reasoning',
+          'reviewRequired', 'safetyOverride'
+        ])
+        && item.source in ['gemini', 'rules']
+        && item.model is string
+        && item.model.size() >= 1
+        && item.model.size() <= 80
+        && item.confidence is int
+        && item.confidence >= 0
+        && item.confidence <= 100
+        && item.summary is string
+        && item.summary.size() >= 1
+        && item.summary.size() <= 220
+        && item.reasoning is string
+        && item.reasoning.size() >= 1
+        && item.reasoning.size() <= 300
+        && item.reviewRequired is bool
+        && item.safetyOverride is bool
+      );
     }
 
     function evidenceItemIsValid(item, complaintId, ownerUid) {
@@ -193,8 +224,12 @@ service cloud.firestore {
         && data.location is string
         && data.location.size() >= 3
         && data.location.size() <= 500
-        && data.category is string
-        && data.category.size() <= 100
+        && data.category in [
+          'Roads & Potholes', 'Waste Management', 'Water Supply',
+          'Electricity & Streetlights', 'Drainage & Sewage',
+          'Public Transport', 'Parks & Public Spaces',
+          'General Civic Issue'
+        ]
         && data.department in [
           'Public Works Department', 'Municipal Waste Department',
           'Water Supply Department', 'Electricity Department',
@@ -219,6 +254,7 @@ service cloud.firestore {
         && data.statusHistory is list
         && data.statusHistory.size() >= 1
         && data.statusHistory.size() <= 100
+        && classificationIsValid(data)
         && evidenceIsValid(data, complaintId);
     }
 

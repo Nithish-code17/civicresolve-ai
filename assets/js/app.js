@@ -1,19 +1,8 @@
 const STATUS_FLOW = ["Submitted", "Under Review", "Assigned", "In Progress", "Resolved"];
 const COLORS = ["#1f6f5f", "#7b4bb7", "#e5a53a", "#d15c5c", "#3f7cac", "#6e9f5f", "#b56a96"];
-
-const CATEGORY_RULES = [
-  { category: "Roads & Potholes", department: "Public Works Department", days: 5, keywords: ["road", "pothole", "footpath", "bridge", "traffic sign", "speed breaker"] },
-  { category: "Waste Management", department: "Municipal Waste Department", days: 2, keywords: ["garbage", "waste", "dustbin", "trash", "dump", "unclean"] },
-  { category: "Water Supply", department: "Water Supply Department", days: 2, keywords: ["water", "pipeline", "pipe", "leak", "tap", "drinking water"] },
-  { category: "Electricity & Streetlights", department: "Electricity Department", days: 2, keywords: ["electric", "wire", "power", "streetlight", "street light", "transformer", "shock"] },
-  { category: "Drainage & Sewage", department: "Sanitation Department", days: 3, keywords: ["drain", "drainage", "sewage", "sewer", "overflow", "stagnant water"] },
-  { category: "Public Transport", department: "Transport Department", days: 4, keywords: ["bus", "transport", "bus stop", "route", "conductor", "ticket"] },
-  { category: "Parks & Public Spaces", department: "Municipal Corporation", days: 4, keywords: ["park", "playground", "bench", "public toilet", "garden"] }
-];
-const DEPARTMENTS = [...new Set([...CATEGORY_RULES.map(rule => rule.department), "General Administration"])];
-
-const HIGH_PRIORITY_WORDS = ["danger", "accident", "fire", "emergency", "electric shock", "exposed wire", "hospital", "school", "fallen tree", "blocked road", "burst"];
-const MEDIUM_PRIORITY_WORDS = ["overflow", "not working", "three days", "many days", "bad smell", "leakage"];
+const CLASSIFICATION_RULES = window.CivicClassificationRules;
+const CATEGORY_RULES = CLASSIFICATION_RULES.CATEGORY_RULES;
+const DEPARTMENTS = [...CLASSIFICATION_RULES.DEPARTMENTS];
 
 let complaints = [];
 let activePage = "dashboard";
@@ -33,6 +22,13 @@ let roleAccountsUnsubscribe = null;
 let selectedEvidenceFiles = [];
 let selectedEvidencePreviewUrls = [];
 let evidenceUploadWarning = "";
+let activeAnalysis = null;
+let activeAnalysisKey = "";
+let activeAnalysisStatus = "idle";
+let aiAnalysisTimer = null;
+let aiAnalysisController = null;
+let aiAnalysisPromise = null;
+let aiAnalysisPromiseKey = "";
 
 function authProfile() { return window.CivicAuth?.getProfile() || null; }
 function currentRole() { return window.CivicAuth?.getRole() || "citizen"; }
@@ -61,18 +57,100 @@ function escapeHtml(value = "") {
     .replaceAll("'", "&#039;");
 }
 
-function analyseComplaint(title, description) {
-  const text = `${title} ${description}`.toLowerCase();
-  const match = CATEGORY_RULES.find(rule => rule.keywords.some(keyword => text.includes(keyword)));
-  const priority = HIGH_PRIORITY_WORDS.some(word => text.includes(word))
-    ? "High"
-    : MEDIUM_PRIORITY_WORDS.some(word => text.includes(word)) ? "Medium" : "Low";
+function analyseComplaint(title, description, location = "") {
+  return CLASSIFICATION_RULES.analyse({ title, description, location });
+}
+
+function analysisInput(input = {}) {
   return {
-    category: match?.category || "General Civic Issue",
-    department: match?.department || "General Administration",
-    days: match?.days || 5,
-    priority
+    title: String(input.title || "").trim(),
+    description: String(input.description || "").trim(),
+    location: String(input.location || "").trim()
   };
+}
+
+function analysisKey(input = {}) {
+  const value = analysisInput(input);
+  return `${value.title}\u241f${value.description}\u241f${value.location}`;
+}
+
+function analysisCanUseAi(input = {}) {
+  const value = analysisInput(input);
+  return value.title.length >= 3 && value.description.length >= 15 && value.location.length >= 3;
+}
+
+function resetAiAnalysis(clearResult = true) {
+  clearTimeout(aiAnalysisTimer);
+  aiAnalysisTimer = null;
+  aiAnalysisController?.abort();
+  aiAnalysisController = null;
+  aiAnalysisPromise = null;
+  aiAnalysisPromiseKey = "";
+  if (clearResult) {
+    activeAnalysis = null;
+    activeAnalysisKey = "";
+    activeAnalysisStatus = "idle";
+  }
+}
+
+function updateAnalysisCard() {
+  const card = document.getElementById("analysisCard");
+  if (!card) return;
+  card.innerHTML = activeAnalysis
+    ? renderAnalysis(activeAnalysis, activeAnalysisStatus)
+    : renderEmptyAnalysis();
+}
+
+async function requestAiAnalysis(input) {
+  const value = analysisInput(input);
+  const key = analysisKey(value);
+  if (activeAnalysisKey === key && ["ready", "fallback"].includes(activeAnalysisStatus)) return activeAnalysis;
+  if (aiAnalysisPromise && aiAnalysisPromiseKey === key) return aiAnalysisPromise;
+
+  aiAnalysisController?.abort();
+  const controller = new AbortController();
+  aiAnalysisController = controller;
+  aiAnalysisPromiseKey = key;
+  activeAnalysis = analyseComplaint(value.title, value.description, value.location);
+  activeAnalysisKey = key;
+  activeAnalysisStatus = "analysing";
+  updateAnalysisCard();
+
+  const promise = window.CivicAI.classifyWithFallback(value, { signal: controller.signal })
+    .then(result => {
+      if (controller.signal.aborted || activeAnalysisKey !== key) return result;
+      activeAnalysis = result;
+      activeAnalysisStatus = result.source === "gemini" ? "ready" : "fallback";
+      updateAnalysisCard();
+      return result;
+    })
+    .finally(() => {
+      if (aiAnalysisPromise === promise) {
+        aiAnalysisPromise = null;
+        aiAnalysisPromiseKey = "";
+        if (aiAnalysisController === controller) aiAnalysisController = null;
+      }
+    });
+  aiAnalysisPromise = promise;
+  return promise;
+}
+
+function previewComplaintAnalysis(input) {
+  const value = analysisInput(input);
+  const key = analysisKey(value);
+  clearTimeout(aiAnalysisTimer);
+  aiAnalysisTimer = null;
+  if (aiAnalysisPromiseKey && aiAnalysisPromiseKey !== key) aiAnalysisController?.abort();
+  activeAnalysis = analyseComplaint(value.title, value.description, value.location);
+  activeAnalysisKey = key;
+  activeAnalysisStatus = analysisCanUseAi(value) ? "waiting" : "preview";
+  updateAnalysisCard();
+  if (!analysisCanUseAi(value)) return;
+  aiAnalysisTimer = setTimeout(() => {
+    requestAiAnalysis(value).catch(error => {
+      if (error?.name !== "AbortError") console.warn("AI preview could not complete.", error);
+    });
+  }, 900);
 }
 
 function addDays(dateString, days) {
@@ -314,6 +392,7 @@ function navigate(page) {
     return;
   }
   activePage = page;
+  resetAiAnalysis();
   if (page !== "submit") clearSelectedEvidence();
   lastSubmitted = null;
   selectedComplaintId = null;
@@ -509,17 +588,30 @@ function attachInitialEvidenceEvents() {
 }
 
 function renderEmptyAnalysis() {
-  return `<div class="section-heading compact"><div class="section-icon purple">✦</div><div><h3>Smart analysis</h3><p>Live classification preview</p></div></div><div class="empty-analysis"><div class="big-icon">⌕</div><h3>Waiting for complaint details</h3><p>Start entering the title and description to view automatic classification.</p></div>`;
+  return `<div class="section-heading compact"><div class="section-icon purple">✦</div><div><h3>AI complaint analysis</h3><p>Gemini with secure rule fallback</p></div></div><div class="empty-analysis"><div class="big-icon">⌕</div><h3>Waiting for complaint details</h3><p>Enter the title, description and location to receive automatic category, department and priority suggestions.</p></div>`;
 }
 
-function renderAnalysis(analysis) {
-  return `<div class="section-heading compact"><div class="section-icon purple">✦</div><div><h3>Smart analysis</h3><p>Live classification preview</p></div></div>
+function analysisStatus(status, analysis) {
+  if (status === "analysing") return { label: "Gemini analysing", className: "loading", note: "Understanding context and selecting an official service route…" };
+  if (status === "ready") return { label: "Gemini AI", className: "ready", note: `${analysis.confidence}% confidence · Server-validated route` };
+  if (status === "fallback") return { label: "Smart rules fallback", className: "fallback", note: "The complaint remains routable even when AI is unavailable." };
+  if (status === "waiting") return { label: "Instant rules preview", className: "waiting", note: "Gemini analysis starts after you pause typing." };
+  return { label: "Instant rules preview", className: "preview", note: "Complete all complaint fields to start Gemini analysis." };
+}
+
+function renderAnalysis(analysis, status = "preview") {
+  const state = analysisStatus(status, analysis);
+  const advice = analysis.safetyAdvice || smartAdvice(analysis.category, analysis.priority);
+  return `<div class="section-heading compact"><div class="section-icon purple">✦</div><div><h3>AI complaint analysis</h3><p>Category, routing and urgency</p></div></div>
+    <div class="analysis-source-row"><span class="analysis-source ${state.className}">${status === "analysing" ? '<i class="analysis-spinner"></i>' : "✦"} ${state.label}</span><small>${escapeHtml(state.note)}</small></div>
     <div class="analysis-results">
       ${analysisItem("Detected category", analysis.category)}
       ${analysisItem("Assigned department", analysis.department)}
       ${analysisItem("Priority level", priorityBadge(analysis.priority), true)}
       ${analysisItem("Estimated resolution", `${analysis.days} working day${analysis.days === 1 ? "" : "s"}`)}
-      <div class="smart-message">✦<p>${smartAdvice(analysis.category, analysis.priority)}</p></div>
+      ${Number.isFinite(analysis.confidence) ? analysisItem("Classification confidence", `${analysis.confidence}%${analysis.reviewRequired ? " · Review recommended" : ""}`) : ""}
+      ${analysis.reasoning ? `<div class="analysis-reason"><span>Why this route?</span><p>${escapeHtml(analysis.reasoning)}</p></div>` : ""}
+      <div class="smart-message">✦<p>${escapeHtml(advice)}</p></div>
     </div>`;
 }
 
@@ -535,8 +627,11 @@ function smartAdvice(category, priority) {
 }
 
 function renderSubmissionSuccess(item) {
+  const classificationLabel = item.classification?.source === "gemini"
+    ? `Gemini AI · ${item.classification.confidence}% confidence`
+    : "Smart rules fallback";
   return `<div class="success-page"><div class="success-icon">✓</div><p class="eyebrow">Complaint registered successfully</p><h2>${item.id}</h2><p>Save this grievance ID. It is required to track the complaint.</p>
-    <div class="result-card">${resultRow("Category", item.category)}${resultRow("Department", item.department)}${resultRow("Priority", item.priority)}${resultRow("Evidence", `${item.evidence?.length || 0} file${item.evidence?.length === 1 ? "" : "s"}`)}${resultRow("Expected resolution", formatDate(item.expectedResolutionDate))}</div>
+    <div class="result-card">${resultRow("Classification", classificationLabel)}${resultRow("Category", item.category)}${resultRow("Department", item.department)}${resultRow("Priority", item.priority)}${resultRow("Evidence", `${item.evidence?.length || 0} file${item.evidence?.length === 1 ? "" : "s"}`)}${resultRow("Expected resolution", formatDate(item.expectedResolutionDate))}</div>
     ${item.duplicateId ? `<div class="alert warning">⚠ <span>A similar unresolved complaint may already exist: <strong>${item.duplicateId}</strong>.</span></div>` : ""}
     ${evidenceUploadWarning ? `<div class="alert warning evidence-warning">⚠ <span><strong>Complaint saved without evidence.</strong> ${escapeHtml(evidenceUploadWarning)} You can add the files later from Track Complaint while the case is awaiting review.</span></div>` : ""}
     <div class="button-row center"><button class="primary-button" data-success-go="track">⌕ Track Complaint</button><button class="secondary-button" id="submitAnother">Submit Another</button></div></div>`;
@@ -802,17 +897,24 @@ function attachPageEvents() {
   if (activePage === "submit") {
     if (lastSubmitted) {
       document.querySelector("[data-success-go]")?.addEventListener("click", () => { trackingResult = lastSubmitted; navigate("track"); });
-      document.getElementById("submitAnother")?.addEventListener("click", () => { lastSubmitted = null; evidenceUploadWarning = ""; clearSelectedEvidence(); renderApp(); });
+      document.getElementById("submitAnother")?.addEventListener("click", () => { lastSubmitted = null; evidenceUploadWarning = ""; resetAiAnalysis(); clearSelectedEvidence(); renderApp(); });
       return;
     }
     const title = document.getElementById("title");
     const description = document.getElementById("description");
+    const location = document.getElementById("location");
     const updateAnalysis = () => {
-      const combined = `${title.value}${description.value}`.trim();
-      document.getElementById("analysisCard").innerHTML = combined.length >= 8 ? renderAnalysis(analyseComplaint(title.value, description.value)) : renderEmptyAnalysis();
+      const combined = `${title.value}${description.value}${location.value}`.trim();
+      if (combined.length < 8) {
+        resetAiAnalysis();
+        updateAnalysisCard();
+        return;
+      }
+      previewComplaintAnalysis({ title: title.value, description: description.value, location: location.value });
     };
     title.addEventListener("input", updateAnalysis);
     description.addEventListener("input", updateAnalysis);
+    location.addEventListener("input", updateAnalysis);
     attachInitialEvidenceEvents();
     document.getElementById("complaintForm").addEventListener("submit", submitComplaint);
   }
@@ -961,21 +1063,29 @@ async function submitComplaint(event) {
   const profile = authProfile();
   data.citizenName = profile?.displayName || data.citizenName;
   data.email = profile?.email || data.email;
-  const analysis = analyseComplaint(data.title, data.description);
-  const location = data.location.toLowerCase();
-  const duplicate = complaints.find(item => item.status !== "Resolved" && item.category === analysis.category && (item.location.toLowerCase().includes(location) || location.includes(item.location.toLowerCase())));
   const today = new Date().toISOString().slice(0, 10);
   const submitButton = event.currentTarget.querySelector('[type="submit"]');
   const originalLabel = submitButton.textContent;
   const files = [...selectedEvidenceFiles];
   submitButton.disabled = true;
-  submitButton.textContent = "Submitting securely…";
+  submitButton.textContent = "Classifying with Gemini AI…";
   try {
+    let analysis;
+    try {
+      analysis = await requestAiAnalysis(data);
+    } catch (error) {
+      if (error?.name !== "AbortError") console.warn("Submission AI analysis failed safely.", error);
+      analysis = window.CivicAI.fallback(data, error);
+    }
+    const location = data.location.toLowerCase();
+    const duplicate = complaints.find(item => item.status !== "Resolved" && item.category === analysis.category && (item.location.toLowerCase().includes(location) || location.includes(item.location.toLowerCase())));
+    submitButton.textContent = "Submitting securely…";
     let complaint = await window.CivicComplaints.create({
       ...data,
       category: analysis.category,
       department: analysis.department,
       priority: analysis.priority,
+      classification: window.CivicAI.toMetadata(analysis),
       expectedResolutionDate: addDays(today, analysis.days),
       duplicateId: duplicate?.id || ""
     });
@@ -996,6 +1106,7 @@ async function submitComplaint(event) {
         evidenceUploadWarning = complaintConnectionError(error);
       }
     }
+    resetAiAnalysis();
     clearSelectedEvidence();
     lastSubmitted = complaint;
     showToast(evidenceUploadWarning
@@ -1155,6 +1266,7 @@ window.CivicAuth.ready().then(() => {
 });
 
 document.addEventListener("civic-auth-changed", event => {
+  resetAiAnalysis();
   clearSelectedEvidence();
   evidenceUploadWarning = "";
   lastSubmitted = null;
