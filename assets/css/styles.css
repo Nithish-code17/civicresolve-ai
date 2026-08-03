@@ -199,10 +199,20 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 .evidence-upload-status[data-tone="error"] { color: var(--danger); }
 .evidence-warning { margin-top: 12px; text-align: left; line-height: 1.5; }
 .analysis-results { display: grid; gap: 10px; }
+.analysis-source-row { display: grid; gap: 7px; margin: 4px 0 14px; padding: 12px; border: 1px solid #e3daf0; border-radius: 12px; background: #faf7fd; }
+.analysis-source-row small { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.analysis-source { display: inline-flex; width: fit-content; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 9px; color: #6d419d; background: #eee4f7; font-size: 10px; font-weight: 800; }
+.analysis-source.ready { color: #17624f; background: #dff3eb; }
+.analysis-source.fallback { color: #8a5d12; background: #fff0ce; }
+.analysis-source.loading { color: #315f9b; background: #e4effc; }
+.analysis-spinner { width: 10px; height: 10px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: dataSpin .7s linear infinite; }
 .analysis-item { padding: 13px 0; border-bottom: 1px solid var(--line); }
 .analysis-item span, .analysis-item strong { display: block; }
 .analysis-item span { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
 .analysis-item strong { font-size: 13px; }
+.analysis-reason { padding: 13px; border-radius: 12px; background: #f3f7f6; }
+.analysis-reason span { display: block; margin-bottom: 5px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.analysis-reason p { margin: 0; color: var(--ink); font-size: 11px; line-height: 1.55; }
 .smart-message { margin-top: 12px; padding: 14px; border-radius: 12px; background: #f4effa; color: #6d419d; display: flex; gap: 9px; align-items: flex-start; }
 .smart-message p { margin: 0; font-size: 11px; line-height: 1.55; }
 .empty-analysis { min-height: 310px; display: grid; place-items: center; align-content: center; text-align: center; color: #91a19d; padding: 20px; }

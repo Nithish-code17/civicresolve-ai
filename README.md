@@ -31,6 +31,9 @@ CivicResolve AI is an intelligent public grievance redressal portal. Citizens ca
 - Role-protected evidence viewing for owners, assigned officers and administrators
 - Evidence metadata stored in Firestore with private Cloudinary asset IDs
 - Firebase-authorized Vercel evidence APIs and five-minute signed file access
+- Gemini complaint classification with structured category, priority, confidence and reasoning
+- Server-validated department routing with deterministic safety and availability fallback rules
+- Privacy-minimised AI requests that exclude account details, exact location and evidence
 - Responsive mobile and desktop design
 
 ## Version 2 interface enhancements
@@ -58,7 +61,8 @@ civicresolve-ai/
 ├── api/
 │   ├── evidence-access.js
 │   ├── evidence-delete.js
-│   └── evidence-upload.js
+│   ├── evidence-upload.js
+│   └── classify-complaint.js
 ├── assets/
 │   ├── css/
 │   │   ├── auth.css
@@ -66,7 +70,9 @@ civicresolve-ai/
 │   │   └── v2.css
 │   └── js/
 │       ├── app.js
+│       ├── ai-classification.js
 │       ├── auth.js
+│       ├── classification-rules.js
 │       ├── evidence-upload.js
 │       ├── firebase-config.js
 │       ├── firestore-data.js
@@ -74,10 +80,12 @@ civicresolve-ai/
 │       └── v2-ui.js
 ├── docs/
 │   ├── ARCHITECTURE.md
+│   ├── AI_CLASSIFICATION_SETUP.md
 │   ├── EVIDENCE_SETUP.md
 │   ├── ENHANCEMENT_ROADMAP.md
 │   └── FIREBASE_SETUP.md
 ├── server/
+│   ├── ai-classifier.js
 │   └── evidence-provider.js
 ├── .env.example
 ├── firebase.json
@@ -108,12 +116,16 @@ This sample ID is available only when local demo mode is explicitly enabled. Pro
 
 ## Deployment
 
-The interface is static HTML, CSS and JavaScript. Three Node.js Vercel Functions protect evidence upload, access and deletion. Vercel installs the `cloudinary` dependency automatically; no build command is required.
+The interface is static HTML, CSS and JavaScript. Node.js Vercel Functions protect evidence operations and Gemini classification. Vercel installs the `cloudinary` dependency automatically; no frontend build command is required.
 
 ## Firebase environment
 
 The `enhancement-v2` branch is connected to Firebase project `civicresolve-ai-3d54c` on the no-cost Spark plan. Email/Password and Google sign-in are enabled, and the default Firestore database uses the Mumbai (`asia-south1`) region. Complaints are stored in role-protected Firestore documents and synchronized with snapshot listeners. Evidence uses Cloudinary's free no-credit-card plan through authenticated Vercel Functions, so Firebase billing is not required. Follow `docs/EVIDENCE_SETUP.md` to add the three server-only provider values before activating uploads.
 
+## AI environment
+
+Gemini classification uses the server-only `GEMINI_API_KEY` Vercel variable and defaults to `gemini-3.5-flash-lite`. The application never sends account details, exact location or evidence to Gemini, and complaint submission automatically falls back to deterministic routing rules. Follow `docs/AI_CLASSIFICATION_SETUP.md` to activate the provider.
+
 ## Next phase
 
-The next major enhancement after evidence activation is map-based complaint locations and AI-assisted classification.
+The next major enhancement is map-based complaint location selection and notifications.

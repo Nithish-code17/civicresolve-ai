@@ -115,7 +115,7 @@ Role accounts are provisioned through a least-privilege workflow:
 - Every role change writes an immutable `roleAudit` record containing the target, previous access, new access, actor and server timestamp.
 - The affected user's active session observes the profile change and immediately reloads the correct complaint scope.
 
-### Stage 6 — no-billing evidence implementation complete; provider activation pending
+### Stage 6 — complete
 
 Complaint evidence uses a three-service transaction:
 
@@ -129,7 +129,24 @@ Complaint evidence uses a three-service transaction:
 - Administrators delete Cloudinary assets before deleting the complaint document.
 - Failed multi-file uploads clean up already completed objects where possible.
 
-The Firebase project remains on Spark. Activating this stage requires a free Cloudinary account and three server-only Vercel environment values, but no billing plan or credit card.
+The Firebase project remains on Spark. Cloudinary credentials are stored only as encrypted Vercel environment values, and the production citizen-to-officer evidence flow is verified.
+
+### Stage 7 — AI classification implementation complete; provider activation pending
+
+Complaint intelligence uses a secure hybrid pipeline:
+
+- Shared deterministic rules provide an immediate category, department, priority and deadline preview.
+- Valid complaint fields trigger a debounced request to a same-origin Vercel Function.
+- The Function verifies the Firebase ID token by reading the caller's citizen profile through Firestore.
+- Only complaint title and description are sent to Gemini; account data, exact location and evidence are excluded.
+- Gemini structured output is restricted to approved categories and priorities.
+- The server maps categories to official departments and deadlines, so the model cannot invent routing targets.
+- Deterministic safety signals can raise the AI priority to High but cannot be overridden downward.
+- Gemini interaction storage is disabled and browser responses use `no-store`.
+- Timeouts, free-tier limits, provider failures and missing configuration fall back to the rules without blocking complaint submission.
+- Firestore records the classification source, model, confidence, explanation and review flags for auditability.
+
+Activation requires a Gemini authorization key stored as the server-only `GEMINI_API_KEY` Vercel variable. No key is committed or sent to the browser.
 
 ## Development principles
 

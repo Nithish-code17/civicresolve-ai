@@ -211,6 +211,13 @@ body { color: var(--v2-text); background: var(--v2-bg); transition: background .
 }
 .v2-shell .form-note { color:var(--v2-primary); background:var(--v2-primary-soft); }
 .v2-shell .smart-message { color:var(--v2-purple); background:var(--v2-purple-soft); }
+.v2-shell .analysis-source-row,.v2-shell .analysis-reason { border-color:var(--v2-line); background:var(--v2-soft); }
+.v2-shell .analysis-source-row small,.v2-shell .analysis-reason span { color:var(--v2-muted); }
+.v2-shell .analysis-reason p { color:var(--v2-text); }
+.v2-shell .analysis-source { color:var(--v2-purple); background:var(--v2-purple-soft); }
+.v2-shell .analysis-source.ready { color:var(--v2-green); background:var(--v2-green-soft); }
+.v2-shell .analysis-source.fallback { color:var(--v2-amber); background:var(--v2-amber-soft); }
+.v2-shell .analysis-source.loading { color:var(--v2-primary); background:var(--v2-primary-soft); }
 .v2-shell .analysis-item { border-color:var(--v2-line); }
 .v2-shell .analysis-item strong,.v2-shell .empty-analysis h3 { color:var(--v2-text); }
 

@@ -67,10 +67,11 @@
 
 ## Phase 7 — AI assistance
 
-- Integrate Gemini for classification, priority and summarisation
+- Integrate Gemini for classification, priority and summarisation — implemented
+- Add authenticated server-only Gemini access and strict structured output — implemented
+- Retain keyword-based availability and safety fallback logic — implemented
 - Generate suggested officer responses
-- Retain keyword-based fallback logic
-- Protect API credentials using server-side functions and environment variables
+- Protect API credentials using server-side functions and environment variables — implemented
 
 ## Phase 8 — Reporting and release
 

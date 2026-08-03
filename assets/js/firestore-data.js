@@ -182,6 +182,19 @@
     return choices.includes(value) ? value : fallback;
   }
 
+  function classificationRecord(value, title = "") {
+    const source = value?.source === "gemini" ? "gemini" : "rules";
+    return {
+      source,
+      model: String(value?.model || (source === "gemini" ? "gemini" : "keyword-rules-v1")).trim().slice(0, 80),
+      confidence: Math.max(0, Math.min(100, Math.round(Number(value?.confidence) || 0))),
+      summary: String(value?.summary || title || "Civic complaint").trim().slice(0, 220),
+      reasoning: String(value?.reasoning || "Deterministic service routing was applied.").trim().slice(0, 300),
+      reviewRequired: Boolean(value?.reviewRequired),
+      safetyOverride: Boolean(value?.safetyOverride)
+    };
+  }
+
   async function createComplaint(input) {
     const current = profile();
     if (!current || current.role !== "citizen") throw new Error("Only citizen accounts can submit complaints.");
@@ -196,6 +209,7 @@
         email: current.email,
         status: "Submitted",
         priority: validChoice(input.priority, VALID_PRIORITIES, "Low"),
+        classification: classificationRecord(input.classification, input.title),
         resolutionNote: "",
         rating: null,
         feedback: "",
@@ -225,6 +239,7 @@
       category: String(input.category || "General Civic Issue"),
       department: String(input.department || "General Administration"),
       priority: validChoice(input.priority, VALID_PRIORITIES, "Low"),
+      classification: classificationRecord(input.classification, input.title),
       status: "Submitted",
       expectedResolutionDate: String(input.expectedResolutionDate || today),
       resolutionNote: "",
