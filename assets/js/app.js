@@ -389,6 +389,13 @@ function stopComplaintSync() {
 function complaintConnectionError(error) {
   const messages = {
     "permission-denied": "Your account is signed in, but Firestore denied this complaint view. Check the account role and published security rules.",
+    "complaint/unauthenticated": "Your sign-in session expired. Sign in again before submitting the complaint.",
+    "complaint/unauthorized": "Only a verified citizen account can submit complaints.",
+    "complaint/profile-missing": "Your citizen profile is missing. Sign out, sign in again and retry.",
+    "complaint/server-not-configured": "Secure complaint submission is being activated. Try again shortly.",
+    "complaint/firebase-unavailable": "The secure complaint service is temporarily unavailable. Try again shortly.",
+    "complaint/firestore-write-failed": "The complaint could not be stored securely. Try again.",
+    "complaint/network-error": "The secure complaint service could not be reached. Check your connection and try again.",
     "unavailable": "Firestore is temporarily unavailable. Check your internet connection and try again.",
     "failed-precondition": "Firestore needs an index for this complaint view. Review the Firebase console message and create the suggested index.",
     "evidence/unauthorized": "Your signed-in role cannot access this complaint evidence.",

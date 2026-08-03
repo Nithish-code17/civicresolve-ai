@@ -79,10 +79,12 @@ Each new complaint receives an `sla` map containing:
 
 Older complaints without the map remain compatible. The monitor backfills them using the existing `expectedResolutionDate` rather than replacing their original promise.
 
+Production complaints are created through `/api/create-complaint`. The endpoint verifies the Firebase citizen profile and calculates `createdAt`, `deadlineAt` and `lastEvaluatedAt` from server time, so SLA creation does not depend on the citizen device clock.
+
 ## Acceptance test
 
-1. Publish the updated Firestore rules.
-2. Add the Vercel variables and redeploy.
+1. Confirm the Firestore rules are published.
+2. Confirm the Vercel variables are present and redeploy.
 3. Submit a High-priority electricity complaint and confirm a one-day SLA.
 4. Open Track Complaint and confirm the SLA deadline and state badge.
 5. Sign in as an officer and verify the SLA column and filter.

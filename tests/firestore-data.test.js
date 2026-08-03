@@ -16,7 +16,7 @@ function createLocalStorage() {
 }
 
 function createHarness(userProfile, snapshotData = []) {
-  const writes = { set: [], update: [], delete: [], queries: [] };
+  const writes = { api: [], update: [], delete: [], queries: [] };
   const fixedDate = new Date("2026-08-02T08:30:00.000Z");
   const timestampFor = date => ({
     toDate: () => new Date(date),
@@ -39,7 +39,6 @@ function createHarness(userProfile, snapshotData = []) {
     },
     serverTimestamp: () => ({ serverTimestamp: true }),
     Timestamp: { now: timestamp, fromDate: timestampFor },
-    setDoc: async (reference, data) => { writes.set.push({ reference, data }); },
     getDoc: async reference => ({
       exists: () => true,
       data: () => snapshotData.find(item => item.id === reference.id)
@@ -51,6 +50,7 @@ function createHarness(userProfile, snapshotData = []) {
     CivicSlaPolicy: slaPolicy,
     CivicAuth: {
       getProfile: () => userProfile,
+      getUser: () => ({ getIdToken: async () => "firebase-id-token" }),
       getFirebaseServices: () => ({ db: {}, sdk }),
       isDemoMode: () => false,
       canManageComplaint: complaint => userProfile.role === "administrator" || complaint.department === userProfile.department,
@@ -71,7 +71,51 @@ function createHarness(userProfile, snapshotData = []) {
     Array,
     Object,
     JSON,
-    queueMicrotask
+    queueMicrotask,
+    fetch: async (url, options = {}) => {
+      writes.api.push({ url, options });
+      const input = JSON.parse(options.body);
+      const sla = slaPolicy.createRecord({ category: input.category, priority: input.priority }, fixedDate);
+      return {
+        ok: true,
+        status: 201,
+        json: async () => ({
+          complaint: {
+            id: "GRV-2026-ABCD1234",
+            citizenName: userProfile.displayName,
+            email: userProfile.email,
+            phone: input.phone,
+            title: input.title,
+            description: input.description,
+            location: input.location,
+            category: input.category,
+            department: input.department,
+            priority: input.priority,
+            classification: input.classification,
+            status: "Submitted",
+            expectedResolutionDate: sla.deadlineDate,
+            sla,
+            resolutionNote: "",
+            rating: null,
+            feedback: "",
+            evidence: [],
+            duplicateId: input.duplicateId,
+            createdByUid: userProfile.uid,
+            createdByEmail: userProfile.email,
+            createdAt: fixedDate.toISOString(),
+            updatedAt: fixedDate.toISOString(),
+            statusHistory: [{
+              status: "Submitted",
+              note: "Complaint submitted by citizen.",
+              changedAt: fixedDate.toISOString(),
+              changedByUid: userProfile.uid,
+              changedByName: userProfile.displayName,
+              changedByRole: "citizen"
+            }]
+          }
+        })
+      };
+    }
   });
   vm.runInContext(source, context, { filename: "firestore-data.js" });
   return { service: window.CivicComplaints, writes };
@@ -142,20 +186,19 @@ async function run() {
     expectedResolutionDate: "2026-08-04",
     duplicateId: ""
   });
-  const createWrite = citizenHarness.writes.set[0];
+  const createWrite = citizenHarness.writes.api[0];
+  const createPayload = JSON.parse(createWrite.options.body);
   assert.match(created.id, /^GRV-2026-/);
-  assert.equal(createWrite.reference.id, created.id);
-  assert.equal(createWrite.data.createdByUid, citizen.uid);
-  assert.equal(createWrite.data.status, "Submitted");
-  assert.equal(createWrite.data.evidence.length, 0);
-  assert.equal(createWrite.data.classification.source, "gemini");
-  assert.equal(createWrite.data.classification.confidence, 91);
-  assert.equal(createWrite.data.sla.policyVersion, "civicresolve-sla-v1");
-  assert.equal(createWrite.data.sla.baseDays, 2);
-  assert.equal(createWrite.data.sla.targetDays, 1);
-  assert.equal(createWrite.data.expectedResolutionDate, "2026-08-03");
-  assert.equal(createWrite.data.sla.deadlineAt.toDate().toISOString(), "2026-08-03T08:30:00.000Z");
-  assert.equal(createWrite.data.statusHistory[0].changedByRole, "citizen");
+  assert.equal(createWrite.url, "/api/create-complaint");
+  assert.equal(createWrite.options.headers.Authorization, "Bearer firebase-id-token");
+  assert.equal(createPayload.category, "Electricity & Streetlights");
+  assert.equal(createPayload.department, "Electricity Department");
+  assert.equal(createPayload.priority, "High");
+  assert.equal(createPayload.classification.source, "gemini");
+  assert.equal(createPayload.classification.confidence, 91);
+  assert.equal(created.createdByUid, citizen.uid);
+  assert.equal(created.sla.policyVersion, "civicresolve-sla-v1");
+  assert.equal(created.sla.targetDays, 1);
 
   const uploadedEvidence = [{
     provider: "cloudinary",

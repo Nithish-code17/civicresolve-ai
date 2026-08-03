@@ -12,6 +12,8 @@ The project remains build-free and uses browser-native JavaScript modules for Fi
 - `assets/css/styles.css` contains the shared design system and responsive styles.
 - `assets/js/auth.js` owns Firebase sessions, user profiles and role permissions.
 - `assets/js/firestore-data.js` owns role-scoped complaint queries, writes, migration and real-time listeners.
+- `server/complaint-creator.js` verifies citizen access, validates routing and creates complaints with server-stamped SLA records.
+- `api/create-complaint.js` exposes secure complaint creation as a same-origin Vercel Function.
 - `assets/js/evidence-upload.js` validates citizen files and calls the same-origin evidence APIs for upload, progress, secure opening and cleanup.
 - `server/evidence-provider.js` verifies Firebase access, file signatures and limits before managing authenticated Cloudinary assets.
 - `api/evidence-*.js` expose the upload, time-limited access and deletion operations as Vercel Functions.
@@ -98,7 +100,7 @@ The complaint service stores complaints in Firestore and uses real-time role-sco
 - Citizens query only documents matching their Firebase UID.
 - Officers query only documents matching their assigned department.
 - Administrators query the complete complaint collection.
-- Citizen creation fixes ownership, initial status and timestamps.
+- Citizen creation uses an authenticated Vercel Function that fixes ownership, routing, initial status and server timestamps.
 - Official updates append immutable audit-history entries.
 - Citizen feedback is permitted only on owned resolved complaints.
 - Eligible LocalStorage citizen complaints can migrate once after sign-in.
@@ -148,14 +150,15 @@ Complaint intelligence uses a secure hybrid pipeline:
 
 The Gemini authorization key is stored as the server-only `GEMINI_API_KEY` Vercel variable. No key is committed or sent to the browser.
 
-### Stage 8 — SLA deadlines and overdue alerts implemented; scheduler activation pending
+### Stage 8 — complete
 
 Complaint accountability uses a shared, versioned SLA policy:
 
 - Each category defines a base service window.
 - High priority uses half the base window, rounded up; Medium uses the base window; Low adds two days.
-- New complaints snapshot the policy version, base days, target days and exact deadline.
-- Firestore rules validate the policy values and allow only a ten-minute client/server clock tolerance.
+- New complaints are created by an authenticated Vercel Function that snapshots the policy version, base days, target days and exact deadline from server time.
+- The Function verifies the Firebase citizen profile, controls the category-to-department mapping and writes through the server-only Firebase service account.
+- Firestore rules continue to validate citizen, officer and administrator reads and later mutations; complaint creation no longer depends on a citizen device clock.
 - Official status updates cannot alter the original SLA snapshot.
 - The interface derives On track, Due soon, Overdue and Resolved state in real time.
 - Dashboards, management tables, tracking pages, analytics and the notification bell show only alerts permitted for the current role.
@@ -163,7 +166,7 @@ Complaint accountability uses a shared, versioned SLA policy:
 - Due-soon and overdue alert timestamps are persisted once, and resolved complaints stop generating alerts.
 - The scheduler authenticates with `CRON_SECRET` and a server-only Firebase service account; no privileged credential reaches browser code.
 
-Activation requires the three values documented in `SLA_SETUP.md`. Firebase remains on Spark and Vercel uses its once-daily Hobby schedule.
+The three values documented in `SLA_SETUP.md` are active. Firebase remains on Spark and Vercel uses its once-daily Hobby schedule.
 
 ## Development principles
 

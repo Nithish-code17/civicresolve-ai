@@ -171,11 +171,6 @@
     return `GRV-${new Date().getFullYear()}-${String(maxNumber + 1).padStart(3, "0")}`;
   }
 
-  function newCloudId(sdk, db) {
-    const randomId = sdk.doc(sdk.collection(db, "complaints")).id.toUpperCase();
-    return `GRV-${new Date().getFullYear()}-${randomId}`;
-  }
-
   function historyEntry(status, note, changedAt) {
     const current = profile();
     return {
@@ -208,6 +203,50 @@
   function slaDraft(category, priority, now = new Date()) {
     if (!window.CivicSlaPolicy) throw new Error("The complaint SLA policy is unavailable.");
     return window.CivicSlaPolicy.createRecord({ category, priority }, now);
+  }
+
+  async function firebaseToken() {
+    const user = window.CivicAuth?.getUser();
+    if (!user || typeof user.getIdToken !== "function") {
+      const error = new Error("Sign in before submitting a complaint.");
+      error.code = "complaint/unauthenticated";
+      throw error;
+    }
+    try {
+      return await user.getIdToken();
+    } catch {
+      const error = new Error("Your sign-in session expired. Sign in again.");
+      error.code = "complaint/unauthenticated";
+      throw error;
+    }
+  }
+
+  async function createRemoteComplaint(input) {
+    const token = await firebaseToken();
+    let response;
+    try {
+      response = await fetch("/api/create-complaint", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        cache: "no-store",
+        body: JSON.stringify(input)
+      });
+    } catch {
+      const error = new Error("The secure complaint service could not be reached. Check your connection and try again.");
+      error.code = "complaint/network-error";
+      throw error;
+    }
+    let payload = null;
+    try { payload = await response.json(); } catch { /* use safe error below */ }
+    if (!response.ok || !payload?.complaint?.id) {
+      const error = new Error(payload?.error?.message || "The complaint could not be submitted.");
+      error.code = payload?.error?.code || "complaint/request-failed";
+      throw error;
+    }
+    return normaliseComplaint(payload.complaint, payload.complaint.id);
   }
 
   async function createComplaint(input) {
@@ -244,19 +283,7 @@
       return clone(complaint);
     }
 
-    const { db, sdk } = firebaseServices();
-    const id = newCloudId(sdk, db);
-    const clientTimestamp = sdk.Timestamp.now();
-    const draft = slaDraft(input.category, priority, clientTimestamp.toDate());
-    const sla = {
-      ...draft,
-      deadlineAt: sdk.Timestamp.fromDate(new Date(draft.deadlineAt)),
-      lastEvaluatedAt: sdk.serverTimestamp()
-    };
-    const data = {
-      id,
-      citizenName: current.displayName,
-      email: current.email,
+    return createRemoteComplaint({
       phone: String(input.phone || current.phone || ""),
       title: String(input.title || "").trim(),
       description: String(input.description || "").trim(),
@@ -265,27 +292,8 @@
       department: String(input.department || "General Administration"),
       priority,
       classification: classificationRecord(input.classification, input.title),
-      status: "Submitted",
-      expectedResolutionDate: draft.deadlineDate,
-      sla,
-      resolutionNote: "",
-      rating: null,
-      feedback: "",
-      evidence: [],
-      duplicateId: String(input.duplicateId || ""),
-      createdByUid: current.uid,
-      createdByEmail: current.email,
-      createdAt: sdk.serverTimestamp(),
-      updatedAt: sdk.serverTimestamp(),
-      statusHistory: [historyEntry("Submitted", "Complaint submitted by citizen.", clientTimestamp)]
-    };
-    await sdk.setDoc(sdk.doc(db, "complaints", id), data);
-    return normaliseComplaint({
-      ...data,
-      sla: { ...sla, lastEvaluatedAt: clientTimestamp },
-      createdAt: today,
-      updatedAt: new Date().toISOString()
-    }, id);
+      duplicateId: String(input.duplicateId || "")
+    });
   }
 
   async function attachEvidence(id, evidenceItems) {
