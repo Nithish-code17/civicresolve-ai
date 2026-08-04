@@ -3,12 +3,16 @@
   let enhancedShell = null;
   let closeSlaNotifications = null;
 
+  function icon(name, size = 18) {
+    return window.CivicIcons?.render(name, "", size) || "";
+  }
+
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, theme);
     const button = document.getElementById("v2ThemeToggle");
     if (button) {
-      button.textContent = theme === "dark" ? "☀" : "☾";
+      button.innerHTML = icon(theme === "dark" ? "sun" : "moon", 17);
       button.title = theme === "dark" ? "Use light theme" : "Use dark theme";
     }
   }
@@ -19,7 +23,7 @@
     modal.className = "v2-command-backdrop";
     modal.innerHTML = `
       <section class="v2-command" role="dialog" aria-modal="true" aria-label="Search complaints">
-        <div class="v2-command-input"><span>⌕</span><input id="v2CommandInput" placeholder="Search by grievance ID, citizen, title or location" autofocus><kbd>Esc</kbd></div>
+        <div class="v2-command-input"><span>${icon("search", 19)}</span><input id="v2CommandInput" placeholder="Search by grievance ID, citizen, title or location" autofocus><kbd>Esc</kbd></div>
         <div class="v2-command-help"><span>Press Enter to open complaint management</span><button type="button" id="v2CommandClose">Close</button></div>
       </section>`;
     document.body.appendChild(modal);
@@ -70,8 +74,8 @@
     panel.className = "v2-notification-panel";
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", "SLA alerts");
-    panel.innerHTML = `<div class="v2-notification-heading"><div><span>Automatic SLA alerts</span><strong>${alerts.length ? `${alerts.length} complaint${alerts.length === 1 ? "" : "s"} need attention` : "No urgent deadlines"}</strong></div><button type="button" aria-label="Close alerts">×</button></div>
-      <div class="v2-notification-list">${alerts.length ? alerts.map(alert => `<button type="button" class="v2-notification-item sla-${escapeHtml(alert.state)}" data-notification-id="${escapeHtml(alert.id)}"><span>${alert.state === "overdue" ? "!" : "◷"}</span><div><strong>${escapeHtml(alert.title)}</strong><small>${escapeHtml(alert.id)} · ${escapeHtml(alert.label)}</small><time>${escapeHtml(alertDeadline(alert.deadlineAt))} · ${escapeHtml(alert.department)}</time></div></button>`).join("") : '<div class="v2-notification-empty"><span>✓</span><strong>Everything is on track</strong><p>No overdue or due-soon complaints are visible to your role.</p></div>'}</div>`;
+    panel.innerHTML = `<div class="v2-notification-heading"><div><span>Automatic SLA alerts</span><strong>${alerts.length ? `${alerts.length} complaint${alerts.length === 1 ? "" : "s"} need attention` : "No urgent deadlines"}</strong></div><button type="button" aria-label="Close alerts">${icon("x", 16)}</button></div>
+      <div class="v2-notification-list">${alerts.length ? alerts.map(alert => `<button type="button" class="v2-notification-item sla-${escapeHtml(alert.state)}" data-notification-id="${escapeHtml(alert.id)}"><span>${icon(alert.state === "overdue" ? "alert-triangle" : "clock", 16)}</span><div><strong>${escapeHtml(alert.title)}</strong><small>${escapeHtml(alert.id)} · ${escapeHtml(alert.label)}</small><time>${escapeHtml(alertDeadline(alert.deadlineAt))} · ${escapeHtml(alert.department)}</time></div></button>`).join("") : `<div class="v2-notification-empty">${icon("check-circle", 23)}<strong>Everything is on track</strong><p>No overdue or due-soon complaints are visible to your role.</p></div>`}</div>`;
     document.body.appendChild(panel);
     const onOutsideClick = event => {
       if (panel.contains(event.target) || event.target.closest?.(".v2-notification")) return;
@@ -107,9 +111,9 @@
       toolbar.id = "v2Toolbar";
       toolbar.className = "v2-toolbar";
       toolbar.innerHTML = `
-        ${canSearchComplaints ? '<button type="button" id="v2GlobalSearch" class="v2-search-trigger"><span>⌕</span><span>Search complaints</span><kbd>Ctrl K</kbd></button>' : ""}
+        ${canSearchComplaints ? `<button type="button" id="v2GlobalSearch" class="v2-search-trigger"><span>${icon("search", 15)}</span><span>Search complaints</span><kbd>Ctrl K</kbd></button>` : ""}
         <button type="button" id="v2ThemeToggle" class="v2-icon-button" aria-label="Toggle colour theme"></button>
-        <button type="button" class="v2-icon-button v2-notification" aria-label="SLA notifications" title="SLA notifications">♢${slaAlertCount ? `<i>${Math.min(slaAlertCount, 99)}</i>` : ""}</button>`;
+        <button type="button" class="v2-icon-button v2-notification" aria-label="SLA notifications" title="SLA notifications">${icon("bell", 17)}${slaAlertCount ? `<i>${Math.min(slaAlertCount, 99)}</i>` : ""}</button>`;
       topbar.insertBefore(toolbar, adminChip);
       toolbar.querySelector("#v2GlobalSearch")?.addEventListener("click", openGlobalSearch);
       toolbar.querySelector("#v2ThemeToggle").addEventListener("click", () => {

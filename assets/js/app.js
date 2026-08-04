@@ -1,5 +1,5 @@
 const STATUS_FLOW = ["Submitted", "Under Review", "Assigned", "In Progress", "Resolved"];
-const COLORS = ["#1f6f5f", "#7b4bb7", "#e5a53a", "#d15c5c", "#3f7cac", "#6e9f5f", "#b56a96"];
+const COLORS = ["#1664d9", "#6941c6", "#d17a00", "#c3343d", "#15805d", "#3973a8", "#8b5d9e"];
 const CLASSIFICATION_RULES = window.CivicClassificationRules;
 const CATEGORY_RULES = CLASSIFICATION_RULES.CATEGORY_RULES;
 const DEPARTMENTS = [...CLASSIFICATION_RULES.DEPARTMENTS];
@@ -55,6 +55,10 @@ function escapeHtml(value = "") {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function icon(name, className = "", size = 18) {
+  return window.CivicIcons?.render(name, className, size) || "";
 }
 
 function analyseComplaint(title, description, location = "") {
@@ -226,7 +230,7 @@ function renderSlaAlertBanner(items = visibleComplaints()) {
     ? `${overdue.length} overdue and ${alerts.length - overdue.length} due soon.`
     : `${countLabel} due within 24 hours.`;
   return `<section class="sla-alert-banner ${overdue.length ? "has-overdue" : ""}">
-    <div class="sla-alert-icon">${overdue.length ? "!" : "◷"}</div>
+    <div class="sla-alert-icon">${icon(overdue.length ? "alert-triangle" : "clock", "", 17)}</div>
     <div><p class="eyebrow">Automatic SLA alert</p><h2>${escapeHtml(summary)}</h2><p>Review most urgent: <strong>${escapeHtml(urgent.item.id)}</strong> · ${escapeHtml(urgent.item.title)} · ${escapeHtml(urgent.assessment.label)}.</p></div>
     <button class="secondary-button small" type="button" data-sla-open="${escapeHtml(urgent.item.id)}">Review most urgent</button>
   </section>`;
@@ -241,8 +245,8 @@ function renderComplaintSlaNotice(item) {
     overdue: "This unresolved complaint has passed its SLA deadline and requires immediate official attention.",
     resolved: "This complaint is resolved and will produce no further overdue alerts."
   };
-  const symbol = assessment.state === "overdue" ? "!" : assessment.state === "due-soon" ? "◷" : "✓";
-  return `<div class="sla-case-notice sla-${assessment.state}"><span>${symbol}</span><div><strong>SLA deadline: ${escapeHtml(deadline)}</strong><p>${escapeHtml(messages[assessment.state] || messages["on-track"])}</p></div>${slaBadge(item)}</div>`;
+  const stateIcon = assessment.state === "overdue" ? "alert-triangle" : assessment.state === "due-soon" ? "clock" : "check-circle";
+  return `<div class="sla-case-notice sla-${assessment.state}"><span>${icon(stateIcon, "", 17)}</span><div><strong>SLA deadline: ${escapeHtml(deadline)}</strong><p>${escapeHtml(messages[assessment.state] || messages["on-track"])}</p></div>${slaBadge(item)}</div>`;
 }
 
 window.CivicSlaAlerts = Object.freeze({
@@ -282,7 +286,7 @@ function countBy(key, items = complaints) {
 
 function showToast(message, tone = "success") {
   const toast = document.getElementById("toast");
-  toast.textContent = `${tone === "error" ? "⚠" : "✓"} ${message}`;
+  toast.textContent = message;
   toast.dataset.tone = tone;
   toast.classList.add("show");
   clearTimeout(showToast.timer);
@@ -306,32 +310,32 @@ function appShell() {
   const initials = (profile?.displayName || "User").split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase();
   const roleLabel = window.CivicAuth.getRoleLabel();
   const navItems = [
-    ["dashboard", "▦", "Dashboard"],
-    ["submit", "+", "Submit Complaint"],
-    ["track", "⌕", "Track Complaint"],
-    ["admin", "☷", isOfficer() ? "Department Work" : "Admin Management"],
-    ["analytics", "▥", "Analytics"],
-    ["accounts", "♙", "Role Accounts"]
+    ["dashboard", "layout-dashboard", "Dashboard"],
+    ["submit", "file-plus", "Submit Complaint"],
+    ["track", "search", "Track Complaint"],
+    ["admin", "clipboard-list", isOfficer() ? "Department Work" : "Admin Management"],
+    ["analytics", "bar-chart", "Analytics"],
+    ["accounts", "users", "Role Accounts"]
   ].filter(([page]) => window.CivicAuth.canAccess(page));
   return `
     <div class="app-shell">
       <button id="sidebarBackdrop" class="sidebar-backdrop hidden" aria-label="Close menu"></button>
       <aside id="sidebar" class="sidebar">
         <div class="brand-row">
-          <div class="brand-icon">✦</div>
-          <div><strong>CivicResolve</strong><span>AI Grievance Portal</span></div>
-          <button id="sidebarClose" class="icon-button sidebar-close" aria-label="Close menu">✕</button>
+          <div class="brand-icon">${icon("shield-check", "", 22)}</div>
+          <div><strong>CivicResolve</strong><span>Public Grievance System</span></div>
+          <button id="sidebarClose" class="icon-button sidebar-close" aria-label="Close menu">${icon("x", "", 18)}</button>
         </div>
         <nav class="sidebar-nav">
           ${navItems.map(item => navLink(...item)).join("")}
         </nav>
-        <div class="sidebar-card sidebar-role-card"><div style="font-size:22px">◉</div><strong>${escapeHtml(roleLabel)} access</strong><p>${isOfficer() ? `Assigned to ${escapeHtml(profile?.department || "your department")}.` : isAdministrator() ? "Full municipal oversight and complaint administration." : "Submit grievances and follow your personal cases securely."}</p></div>
+        <div class="sidebar-card sidebar-role-card">${icon(isCitizen() ? "user" : isOfficer() ? "building" : "shield-check", "", 20)}<strong>${escapeHtml(roleLabel)} access</strong><p>${isOfficer() ? `Assigned to ${escapeHtml(profile?.department || "your department")}.` : isAdministrator() ? "Full municipal oversight and complaint administration." : "Submit grievances and follow your personal cases securely."}</p></div>
       </aside>
       <main class="main-area">
         <header class="topbar">
-          <button id="menuButton" class="icon-button menu-button" aria-label="Open menu">☰</button>
-          <div><p class="eyebrow">Smart civic administration</p><h1>${pageTitle(activePage)}</h1></div>
-          <div class="admin-chip"><div class="admin-avatar">${escapeHtml(initials)}</div><div><strong>${escapeHtml(profile?.displayName || "CivicResolve User")}</strong><span class="role-badge">${escapeHtml(roleLabel)}</span></div><button id="signOutButton" class="v2-icon-button signout-button" type="button" aria-label="Sign out" title="Sign out">↪</button></div>
+          <button id="menuButton" class="icon-button menu-button" aria-label="Open menu">${icon("menu", "", 19)}</button>
+          <div><p class="eyebrow">Municipal service operations</p><h1>${pageTitle(activePage)}</h1></div>
+          <div class="admin-chip"><div class="admin-avatar">${escapeHtml(initials)}</div><div><strong>${escapeHtml(profile?.displayName || "CivicResolve User")}</strong><span class="role-badge">${escapeHtml(roleLabel)}</span></div><button id="signOutButton" class="v2-icon-button signout-button" type="button" aria-label="Sign out" title="Sign out">${icon("log-out", "", 17)}</button></div>
         </header>
         <div id="pageContent" class="content-wrap"></div>
       </main>
@@ -339,8 +343,8 @@ function appShell() {
     </div>`;
 }
 
-function navLink(id, symbol, label) {
-  return `<button class="nav-link ${activePage === id ? "active" : ""}" data-page="${id}"><span class="nav-symbol">${symbol}</span><span>${label}</span>${activePage === id ? '<span class="nav-arrow">›</span>' : ""}</button>`;
+function navLink(id, iconName, label) {
+  return `<button class="nav-link ${activePage === id ? "active" : ""}" data-page="${id}"><span class="nav-symbol">${icon(iconName, "", 17)}</span><span>${label}</span>${activePage === id ? `<span class="nav-arrow">${icon("chevron-right", "", 14)}</span>` : ""}</button>`;
 }
 
 function renderApp() {
@@ -367,7 +371,7 @@ function renderPage() {
 
 function renderComplaintDataState() {
   if (complaintDataError) return `<section class="data-state-card error-state">
-    <div class="data-state-icon">⚠</div><p class="eyebrow">Secure data connection</p>
+    <div class="data-state-icon">${icon("alert-triangle", "", 24)}</div><p class="eyebrow">Secure data connection</p>
     <h2>Complaints could not be loaded</h2><p>${escapeHtml(complaintDataError)}</p>
     <button id="retryComplaintSync" class="primary-button" type="button">Retry Firestore connection</button>
   </section>`;
@@ -489,8 +493,8 @@ function navigate(page) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function statCard(label, value, icon, hint = "", tone = "") {
-  return `<article class="stat-card ${tone}"><div class="stat-icon">${icon}</div><div><span>${label}</span><strong>${value}</strong>${hint ? `<small>${hint}</small>` : ""}</div></article>`;
+function statCard(label, value, iconName, hint = "", tone = "") {
+  return `<article class="stat-card ${tone}"><div class="stat-icon">${icon(iconName, "", 19)}</div><div><span>${label}</span><strong>${value}</strong>${hint ? `<small>${hint}</small>` : ""}</div></article>`;
 }
 
 function panel(title, subtitle, content, action = "") {
@@ -501,22 +505,22 @@ function dashboardHero() {
   const profile = authProfile();
   if (isCitizen()) return `<section class="hero-panel">
     <div>
-      <span class="hero-kicker">✦ Citizen grievance services</span>
+      <span class="hero-kicker">Citizen grievance services</span>
       <h2>Welcome, ${escapeHtml(profile?.displayName?.split(" ")[0] || "Citizen")}.</h2>
       <p>Report a civic issue, receive a grievance ID and follow every official update from one secure account.</p>
-      <div class="hero-actions"><button class="primary-button" data-go="submit">+ Submit Complaint</button><button class="secondary-button" data-go="track">⌕ Track My Complaint</button></div>
+      <div class="hero-actions"><button class="primary-button" data-go="submit">${icon("file-plus", "", 16)} Submit complaint</button><button class="secondary-button" data-go="track">${icon("search", "", 16)} Track my complaint</button></div>
     </div>
-    <div class="hero-visual"><div class="pulse-ring">✓</div><div class="floating-card fc-one">✓ Personal case access</div><div class="floating-card fc-two">◷ Live status tracking</div></div>
+    <div class="product-hero-status"><div><span class="status-icon">${icon("shield-check", "", 16)}</span><p><strong>Account protected</strong><span>Your case data is visible only to authorised roles.</span></p></div><div><span class="status-icon">${icon("sparkles", "", 16)}</span><p><strong>Automatic routing</strong><span>AI and service rules select the responsible department.</span></p></div><div><span class="status-icon">${icon("clock", "", 16)}</span><p><strong>Deadline monitored</strong><span>SLA status remains visible through resolution.</span></p></div></div>
   </section>`;
 
   return `<section class="hero-panel">
     <div>
-      <span class="hero-kicker">✦ ${isOfficer() ? "Department operations" : "Municipal oversight"}</span>
+      <span class="hero-kicker">${isOfficer() ? "Department operations" : "Municipal oversight"}</span>
       <h2>${isOfficer() ? `Manage ${escapeHtml(profile?.department || "department")} grievances.` : "Resolve public issues faster and more transparently."}</h2>
       <p>${isOfficer() ? "Review assigned cases, update progress and complete resolution work within the expected service window." : "Monitor every department, manage routing and priority, and maintain accountable grievance resolution."}</p>
-      <div class="hero-actions"><button class="primary-button" data-go="admin">☷ Open Complaint Management</button><button class="secondary-button" data-go="analytics">▥ View Analytics</button></div>
+      <div class="hero-actions"><button class="primary-button" data-go="admin">${icon("clipboard-list", "", 16)} Open complaint management</button><button class="secondary-button" data-go="analytics">${icon("bar-chart", "", 16)} View analytics</button></div>
     </div>
-    <div class="hero-visual"><div class="pulse-ring">✓</div><div class="floating-card fc-one">✓ Role-protected access</div><div class="floating-card fc-two">⚠ Smart priority</div></div>
+    <div class="product-hero-status"><div><span class="status-icon">${icon("shield-check", "", 16)}</span><p><strong>Role-scoped workspace</strong><span>Only authorised cases and actions are available.</span></p></div><div><span class="status-icon">${icon("activity", "", 16)}</span><p><strong>Operational visibility</strong><span>Workload, urgency and progress remain measurable.</span></p></div><div><span class="status-icon">${icon("clock", "", 16)}</span><p><strong>SLA accountability</strong><span>Due-soon and overdue cases are highlighted automatically.</span></p></div></div>
   </section>`;
 }
 
@@ -528,14 +532,14 @@ function renderDashboard() {
     ${dashboardHero()}
     ${renderSlaAlertBanner(scopedComplaints)}
     <section class="stats-grid">
-      ${statCard("Total Complaints", stats.total, "☷", scopeLabel)}
-      ${statCard("Pending", stats.pending, "◷", "Submitted or under review", "warning")}
-      ${statCard("In Progress", stats.inProgress, "◉", "Assigned and being handled", "info")}
-      ${statCard("Resolved", stats.resolved, "✓", `${stats.resolutionRate}% resolution rate`, "success")}
+      ${statCard("Total Complaints", stats.total, "clipboard-list", scopeLabel)}
+      ${statCard("Pending", stats.pending, "clock", "Submitted or under review", "warning")}
+      ${statCard("In Progress", stats.inProgress, "activity", "Assigned and being handled", "info")}
+      ${statCard("Resolved", stats.resolved, "check-circle", `${stats.resolutionRate}% resolution rate`, "success")}
     </section>
     <section class="two-column-grid">
       ${panel("Complaints by category", "Distribution within your permitted complaint scope", renderDonut(countBy("category", scopedComplaints)))}
-      ${panel("Complaint status", "Current workload in your permitted scope", renderBars(countBy("status", scopedComplaints), "#1f6f5f"))}
+      ${panel("Complaint status", "Current workload in your permitted scope", renderBars(countBy("status", scopedComplaints), "#1664d9"))}
     </section>
     ${panel("Recent complaints", isCitizen() ? "Your latest registered grievances" : "Latest complaints available to your role", complaintTable(scopedComplaints.slice(0, 5), true), `<button class="text-button" data-go="${isCitizen() ? "track" : "admin"}">${isCitizen() ? "Track grievance" : "Manage all"} ›</button>`)}
   </div>`;
@@ -562,12 +566,12 @@ function renderBars(data, fixedColor = null) {
 }
 
 function complaintTable(items, compact = false) {
-  if (!items.length) return '<div class="empty-table">⌕<p>No complaints match the selected filters.</p></div>';
+  if (!items.length) return `<div class="empty-table">${icon("inbox", "", 24)}<p>No complaints match the selected filters.</p></div>`;
   return `<div class="table-scroll"><table class="data-table"><thead><tr><th>ID</th><th>Complaint</th><th>Category</th><th>Priority</th><th>Status</th><th>SLA</th>${compact ? "" : "<th>Actions</th>"}</tr></thead><tbody>${items.map(item => `<tr>
     <td><strong>${escapeHtml(item.id)}</strong><span class="table-subtext">${formatDate(item.createdAt)}</span></td>
     <td><strong>${escapeHtml(item.title)}</strong><span class="table-subtext">${escapeHtml(item.location)}${item.evidence?.length ? ` · ${item.evidence.length} evidence file${item.evidence.length === 1 ? "" : "s"}` : ""}</span></td>
     <td>${escapeHtml(item.category)}</td><td>${priorityBadge(item.priority)}</td><td>${statusBadge(item.status)}</td><td>${slaBadge(item)}</td>
-    ${compact ? "" : `<td><div class="table-actions">${window.CivicAuth.canManageComplaint(item) ? `<button class="table-button" data-manage="${item.id}">Manage</button>` : ""}${window.CivicAuth.canDeleteComplaint() ? `<button class="delete-button" data-delete="${item.id}" title="Delete complaint">×</button>` : ""}</div></td>`}
+    ${compact ? "" : `<td><div class="table-actions">${window.CivicAuth.canManageComplaint(item) ? `<button class="table-button" data-manage="${item.id}">Manage</button>` : ""}${window.CivicAuth.canDeleteComplaint() ? `<button class="delete-button" data-delete="${item.id}" title="Delete complaint" aria-label="Delete complaint">${icon("trash", "", 14)}</button>` : ""}</div></td>`}
   </tr>`).join("")}</tbody></table></div>`;
 }
 
@@ -576,7 +580,7 @@ function renderSubmitPage() {
   const profile = authProfile();
   return `<div class="form-layout">
     <form id="complaintForm" class="form-card">
-      <div class="section-heading"><div class="section-icon">+</div><div><h2>Report a public issue</h2><p>Provide clear details so the correct department can respond quickly.</p></div></div>
+      <div class="section-heading"><div class="section-icon">${icon("file-plus", "", 19)}</div><div><h2>Report a public issue</h2><p>Provide clear details so the correct department can respond quickly.</p></div></div>
       <div class="form-grid two">
         ${field("Full name", "citizenName", "Enter citizen name", true, "text", `value="${escapeHtml(profile?.displayName || "")}" readonly`)}
         ${field("Phone number", "phone", "10-digit mobile number", true, "tel", `pattern="[0-9]{10}" value="${escapeHtml(profile?.phone || "")}"`)}
@@ -586,8 +590,8 @@ function renderSubmitPage() {
       <label class="field-label"><span>Detailed description</span><textarea id="description" name="description" placeholder="Describe the problem, how long it has existed and whether it creates danger." required minlength="15" rows="6"></textarea></label>
       ${field("Location / landmark", "location", "Example: Near Gandhipuram Bus Stand", true)}
       ${renderInitialEvidenceUploader()}
-      <div class="form-note">✓ This complaint will be securely linked to your signed-in citizen account.</div>
-      <button class="primary-button full-width" type="submit">✦ Analyse and Submit Complaint</button>
+      <div class="form-note">${icon("shield-check", "", 16)} This complaint will be securely linked to your signed-in citizen account.</div>
+      <button class="primary-button full-width" type="submit">${icon("sparkles", "", 16)} Analyse and submit complaint</button>
     </form>
     <aside id="analysisCard" class="analysis-card">${renderEmptyAnalysis()}</aside>
   </div>`;
@@ -599,10 +603,10 @@ function field(label, name, placeholder, required = false, type = "text", extra 
 
 function renderInitialEvidenceUploader() {
   return `<section class="evidence-field" aria-labelledby="evidenceLabel">
-    <div class="evidence-field-heading"><div><strong id="evidenceLabel">Photo or document evidence <span>Optional</span></strong><small>Up to 3 JPG, PNG, WebP, or PDF files · 5 MB each</small></div><span class="secure-file-badge">▣ Secure upload</span></div>
+    <div class="evidence-field-heading"><div><strong id="evidenceLabel">Photo or document evidence <span>Optional</span></strong><small>Up to 3 JPG, PNG, WebP, or PDF files · 5 MB each</small></div><span class="secure-file-badge">${icon("lock", "", 12)} Secure upload</span></div>
     <label id="evidenceDropZone" class="evidence-dropzone" for="evidenceFiles" tabindex="0">
       <input id="evidenceFiles" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple hidden>
-      <span class="evidence-upload-icon">⇧</span><span><strong>Drop evidence here or browse files</strong><small>Clear photos and supporting documents help departments verify the issue.</small></span>
+      <span class="evidence-upload-icon">${icon("upload", "", 20)}</span><span><strong>Drop evidence here or browse files</strong><small>Clear photos and supporting documents help departments verify the issue.</small></span>
     </label>
     <div id="evidenceSelection" class="evidence-selection"></div>
   </section>`;
@@ -628,7 +632,7 @@ function selectedEvidenceMarkup() {
     const isImage = file.type.startsWith("image/");
     const previewUrl = isImage ? URL.createObjectURL(file) : "";
     if (previewUrl) selectedEvidencePreviewUrls.push(previewUrl);
-    return `<article class="selected-evidence-card">${isImage ? `<img src="${previewUrl}" alt="Selected evidence preview">` : '<span class="pdf-evidence-icon">PDF</span>'}<div><strong>${escapeHtml(file.name)}</strong><small>${formatFileSize(file.size)}</small></div><button type="button" data-remove-evidence="${index}" aria-label="Remove ${escapeHtml(file.name)}">×</button></article>`;
+    return `<article class="selected-evidence-card">${isImage ? `<img src="${previewUrl}" alt="Selected evidence preview">` : '<span class="pdf-evidence-icon">PDF</span>'}<div><strong>${escapeHtml(file.name)}</strong><small>${formatFileSize(file.size)}</small></div><button type="button" data-remove-evidence="${index}" aria-label="Remove ${escapeHtml(file.name)}">${icon("x", "", 14)}</button></article>`;
   }).join("")}</div>`;
 }
 
@@ -677,7 +681,7 @@ function attachInitialEvidenceEvents() {
 }
 
 function renderEmptyAnalysis() {
-  return `<div class="section-heading compact"><div class="section-icon purple">✦</div><div><h3>AI complaint analysis</h3><p>Gemini with secure rule fallback</p></div></div><div class="empty-analysis"><div class="big-icon">⌕</div><h3>Waiting for complaint details</h3><p>Enter the title, description and location to receive automatic category, department and priority suggestions.</p></div>`;
+  return `<div class="section-heading compact"><div class="section-icon purple">${icon("sparkles", "", 18)}</div><div><h3>Assisted complaint routing</h3><p>Gemini with secure service-rule fallback</p></div></div><div class="empty-analysis"><div class="big-icon empty-icon">${icon("search", "", 24)}</div><h3>Waiting for complaint details</h3><p>Enter the title, description and location to receive automatic category, department and priority suggestions.</p></div>`;
 }
 
 function analysisStatus(status, analysis) {
@@ -691,8 +695,8 @@ function analysisStatus(status, analysis) {
 function renderAnalysis(analysis, status = "preview") {
   const state = analysisStatus(status, analysis);
   const advice = analysis.safetyAdvice || smartAdvice(analysis.category, analysis.priority);
-  return `<div class="section-heading compact"><div class="section-icon purple">✦</div><div><h3>AI complaint analysis</h3><p>Category, routing and urgency</p></div></div>
-    <div class="analysis-source-row"><span class="analysis-source ${state.className}">${status === "analysing" ? '<i class="analysis-spinner"></i>' : "✦"} ${state.label}</span><small>${escapeHtml(state.note)}</small></div>
+  return `<div class="section-heading compact"><div class="section-icon purple">${icon("sparkles", "", 18)}</div><div><h3>Assisted complaint routing</h3><p>Category, routing and urgency</p></div></div>
+    <div class="analysis-source-row"><span class="analysis-source ${state.className}">${status === "analysing" ? '<i class="analysis-spinner"></i>' : icon("sparkles", "", 13)} ${state.label}</span><small>${escapeHtml(state.note)}</small></div>
     <div class="analysis-results">
       ${analysisItem("Detected category", analysis.category)}
       ${analysisItem("Assigned department", analysis.department)}
@@ -700,7 +704,7 @@ function renderAnalysis(analysis, status = "preview") {
       ${analysisItem("Estimated resolution", `${analysis.days} working day${analysis.days === 1 ? "" : "s"}`)}
       ${Number.isFinite(analysis.confidence) ? analysisItem("Classification confidence", `${analysis.confidence}%${analysis.reviewRequired ? " · Review recommended" : ""}`) : ""}
       ${analysis.reasoning ? `<div class="analysis-reason"><span>Why this route?</span><p>${escapeHtml(analysis.reasoning)}</p></div>` : ""}
-      <div class="smart-message">✦<p>${escapeHtml(advice)}</p></div>
+      <div class="smart-message">${icon("shield-check", "", 16)}<p>${escapeHtml(advice)}</p></div>
     </div>`;
 }
 
@@ -719,19 +723,19 @@ function renderSubmissionSuccess(item) {
   const classificationLabel = item.classification?.source === "gemini"
     ? `Gemini AI · ${item.classification.confidence}% confidence`
     : "Smart rules fallback";
-  return `<div class="success-page"><div class="success-icon">✓</div><p class="eyebrow">Complaint registered successfully</p><h2>${item.id}</h2><p>Save this grievance ID. It is required to track the complaint.</p>
+  return `<div class="success-page"><div class="success-icon">${icon("check-circle", "", 28)}</div><p class="eyebrow">Complaint registered successfully</p><h2>${item.id}</h2><p>Save this grievance ID. It is required to track the complaint.</p>
     <div class="result-card">${resultRow("Classification", classificationLabel)}${resultRow("Category", item.category)}${resultRow("Department", item.department)}${resultRow("Priority", item.priority)}${resultRow("Evidence", `${item.evidence?.length || 0} file${item.evidence?.length === 1 ? "" : "s"}`)}${resultRow("SLA deadline", formatDateTime(slaAssessment(item).deadlineAt || item.expectedResolutionDate))}</div>
-    ${item.duplicateId ? `<div class="alert warning">⚠ <span>A similar unresolved complaint may already exist: <strong>${item.duplicateId}</strong>.</span></div>` : ""}
-    ${evidenceUploadWarning ? `<div class="alert warning evidence-warning">⚠ <span><strong>Complaint saved without evidence.</strong> ${escapeHtml(evidenceUploadWarning)} You can add the files later from Track Complaint while the case is awaiting review.</span></div>` : ""}
-    <div class="button-row center"><button class="primary-button" data-success-go="track">⌕ Track Complaint</button><button class="secondary-button" id="submitAnother">Submit Another</button></div></div>`;
+    ${item.duplicateId ? `<div class="alert warning">${icon("alert-triangle", "", 17)} <span>A similar unresolved complaint may already exist: <strong>${item.duplicateId}</strong>.</span></div>` : ""}
+    ${evidenceUploadWarning ? `<div class="alert warning evidence-warning">${icon("alert-triangle", "", 17)} <span><strong>Complaint saved without evidence.</strong> ${escapeHtml(evidenceUploadWarning)} You can add the files later from Track Complaint while the case is awaiting review.</span></div>` : ""}
+    <div class="button-row center"><button class="primary-button" data-success-go="track">${icon("search", "", 16)} Track complaint</button><button class="secondary-button" id="submitAnother">Submit another</button></div></div>`;
 }
 
 function resultRow(label, value) { return `<div class="result-row"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`; }
 
 function renderTrackPage() {
   return `<div class="page-stack">
-    <section class="track-hero"><div class="track-icon">⌕</div><p class="eyebrow">Protected progress tracking</p><h2>Track ${isCitizen() ? "your" : "an authorised"} grievance</h2><p>Enter a complaint ID available to your signed-in role.</p>
-      <form id="trackForm" class="track-search"><input id="trackId" placeholder="Example: GRV-2026-001" required><button class="primary-button" type="submit">⌕ Track</button></form>
+    <section class="track-hero"><div class="track-icon">${icon("search", "", 24)}</div><p class="eyebrow">Protected progress tracking</p><h2>Track ${isCitizen() ? "your" : "an authorised"} grievance</h2><p>Enter a complaint ID available to your signed-in role.</p>
+      <form id="trackForm" class="track-search"><input id="trackId" placeholder="Example: GRV-2026-001" required><button class="primary-button" type="submit">${icon("search", "", 16)} Track</button></form>
       ${window.CivicAuth.isDemoMode() ? '<button id="demoTrack" class="sample-link">Try permitted demo ID: GRV-2026-001</button>' : ""}
     </section>
     <div id="trackResult">${trackingResult ? renderTrackingResult(trackingResult) : ""}</div>
@@ -739,19 +743,19 @@ function renderTrackPage() {
 }
 
 function renderTrackingResult(item) {
-  if (!item) return `<div class="alert error">⚠ <span>${escapeHtml(trackingError || "No complaint was found. Check the grievance ID and try again.")}</span></div>`;
+  if (!item) return `<div class="alert error">${icon("alert-circle", "", 17)} <span>${escapeHtml(trackingError || "No complaint was found. Check the grievance ID and try again.")}</span></div>`;
   const currentIndex = STATUS_FLOW.indexOf(item.status);
   return `<section class="tracking-result">
     <div class="tracking-header"><div><p class="eyebrow">${escapeHtml(item.id)}</p><h2>${escapeHtml(item.title)}</h2>${statusBadge(item.status)}</div>${priorityBadge(item.priority + " priority").replace(`priority-${item.priority.toLowerCase()} priority`, `priority-${item.priority.toLowerCase()}`)}</div>
     <div class="details-grid">
-      ${detailCard("◉", "Citizen", item.citizenName)}${detailCard("⌖", "Location", item.location)}${detailCard("▤", "Department", item.department)}${detailCard("◷", "SLA deadline", formatDateTime(slaAssessment(item).deadlineAt || item.expectedResolutionDate))}
+      ${detailCard("user", "Citizen", item.citizenName)}${detailCard("map-pin", "Location", item.location)}${detailCard("building", "Department", item.department)}${detailCard("clock", "SLA deadline", formatDateTime(slaAssessment(item).deadlineAt || item.expectedResolutionDate))}
     </div>
     ${renderComplaintSlaNotice(item)}
     <div class="description-block"><strong>Complaint description</strong><p>${escapeHtml(item.description)}</p></div>
     ${renderEvidenceSection(item)}
-    <div class="timeline-card"><h3>Status timeline</h3><div class="timeline">${STATUS_FLOW.map((status, index) => `<div class="timeline-step ${index <= currentIndex ? "complete" : ""} ${index === currentIndex ? "current" : ""}"><div class="timeline-marker">${index <= currentIndex ? "✓" : "○"}</div><span>${status}</span></div>`).join("")}</div></div>
+    <div class="timeline-card"><h3>Status timeline</h3><div class="timeline">${STATUS_FLOW.map((status, index) => `<div class="timeline-step ${index <= currentIndex ? "complete" : ""} ${index === currentIndex ? "current" : ""}"><div class="timeline-marker">${index <= currentIndex ? icon("check", "", 13) : ""}</div><span>${status}</span></div>`).join("")}</div></div>
     ${renderStatusHistory(item)}
-    ${item.resolutionNote ? `<div class="resolution-note">✓<div><strong>Department update</strong><p>${escapeHtml(item.resolutionNote)}</p></div></div>` : ""}
+    ${item.resolutionNote ? `<div class="resolution-note">${icon("check-circle", "", 18)}<div><strong>Department update</strong><p>${escapeHtml(item.resolutionNote)}</p></div></div>` : ""}
     ${item.status === "Resolved" && isCitizen() && window.CivicAuth.ownsComplaint(item) ? renderFeedback(item) : ""}
   </section>`;
 }
@@ -764,7 +768,7 @@ function renderStatusHistory(item) {
   </section>`;
 }
 
-function detailCard(icon, label, value) { return `<article class="detail-card"><span class="detail-icon">${icon}</span><div><span>${label}</span><strong>${escapeHtml(value)}</strong></div></article>`; }
+function detailCard(iconName, label, value) { return `<article class="detail-card"><span class="detail-icon">${icon(iconName, "", 17)}</span><div><span>${label}</span><strong>${escapeHtml(value)}</strong></div></article>`; }
 
 function canAddEvidence(item) {
   return isCitizen()
@@ -777,7 +781,7 @@ function renderEvidenceSection(item, includeCitizenUpload = true) {
   const evidence = Array.isArray(item.evidence) ? item.evidence : [];
   const remaining = Math.max(0, window.CivicEvidence.MAX_FILES - evidence.length);
   const cards = evidence.length
-    ? `<div class="evidence-grid">${evidence.map((file, index) => `<article class="evidence-card"><span class="evidence-type-icon ${window.CivicEvidence.isImage(file) ? "image-file" : "pdf-file"}">${window.CivicEvidence.isImage(file) ? "▧" : "PDF"}</span><div><strong>${escapeHtml(file.originalName)}</strong><small>${formatFileSize(file.size)} · Uploaded ${formatDate(file.uploadedAt)}</small></div><button type="button" class="table-button" data-evidence-index="${index}">View file</button></article>`).join("")}</div>`
+    ? `<div class="evidence-grid">${evidence.map((file, index) => `<article class="evidence-card"><span class="evidence-type-icon ${window.CivicEvidence.isImage(file) ? "image-file" : "pdf-file"}">${window.CivicEvidence.isImage(file) ? icon("file-text", "", 18) : "PDF"}</span><div><strong>${escapeHtml(file.originalName)}</strong><small>${formatFileSize(file.size)} · Uploaded ${formatDate(file.uploadedAt)}</small></div><button type="button" class="table-button" data-evidence-index="${index}">View file</button></article>`).join("")}</div>`
     : '<div class="empty-evidence">No photo or document evidence was attached.</div>';
   const addFiles = includeCitizenUpload && canAddEvidence(item)
     ? `<div class="additional-evidence"><div><strong>Add supporting evidence</strong><small>${remaining} file slot${remaining === 1 ? "" : "s"} remaining · Added files cannot be edited after department work begins.</small></div><div class="additional-evidence-actions"><input id="additionalEvidenceFiles" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple><button id="uploadAdditionalEvidence" type="button" class="secondary-button small" disabled>Upload evidence</button></div><div id="additionalEvidenceStatus" class="evidence-upload-status"></div></div>`
@@ -862,9 +866,9 @@ function renderAdminPage() {
   const stats = getStats(managedComplaints);
   const subtitle = isOfficer() ? `Showing complaints assigned to ${authProfile()?.department || "your department"}` : "Search, assign and update citizen grievances";
   return `<div class="page-stack">
-    <section class="stats-grid compact-stats">${statCard("Total", stats.total, "☷")}${statCard("High Priority", stats.highPriority, "⚠", "", "danger")}${statCard("Active Work", stats.inProgress, "◉", "", "info")}${statCard("Resolved", stats.resolved, "✓", "", "success")}</section>
+    <section class="stats-grid compact-stats">${statCard("Total", stats.total, "clipboard-list")}${statCard("High Priority", stats.highPriority, "alert-triangle", "", "danger")}${statCard("Active Work", stats.inProgress, "activity", "", "info")}${statCard("Resolved", stats.resolved, "check-circle", "", "success")}</section>
     ${renderSlaAlertBanner(managedComplaints)}
-    ${panel("Complaint management", subtitle, `<div class="filter-row sla-filter-row"><div class="search-box">⌕<input id="adminSearch" placeholder="Search ID, title, citizen or location"></div><select id="statusFilter"><option>All</option>${STATUS_FLOW.map(s => `<option>${s}</option>`).join("")}</select><select id="priorityFilter"><option>All</option><option>High</option><option>Medium</option><option>Low</option></select><select id="slaFilter"><option value="All">All SLA states</option><option value="overdue">Overdue</option><option value="due-soon">Due soon</option><option value="on-track">On track</option><option value="resolved">Resolved</option></select></div><div id="adminTable">${complaintTable(managedComplaints)}</div>`, window.CivicComplaints.isDemoMode() && isAdministrator() ? '<button id="resetDemo" class="secondary-button small">Reset demo data</button>' : '<span class="role-badge">Live Firestore</span>')}
+    ${panel("Complaint management", subtitle, `<div class="filter-row sla-filter-row"><div class="search-box">${icon("search", "", 16)}<input id="adminSearch" placeholder="Search ID, title, citizen or location"></div><select id="statusFilter"><option>All</option>${STATUS_FLOW.map(s => `<option>${s}</option>`).join("")}</select><select id="priorityFilter"><option>All</option><option>High</option><option>Medium</option><option>Low</option></select><select id="slaFilter"><option value="All">All SLA states</option><option value="overdue">Overdue</option><option value="due-soon">Due soon</option><option value="on-track">On track</option><option value="resolved">Resolved</option></select></div><div id="adminTable">${complaintTable(managedComplaints)}</div>`, window.CivicComplaints.isDemoMode() && isAdministrator() ? '<button id="resetDemo" class="secondary-button small">Reset demo data</button>' : '<span class="role-badge">Live Firestore</span>')}
   </div>`;
 }
 
@@ -877,10 +881,10 @@ function renderAnalyticsPage() {
   const categories = countBy("category", scopedComplaints);
   const top = categories[0];
   return `<div class="page-stack">
-    <section class="insight-banner"><div class="section-icon purple">✦</div><div><p class="eyebrow">Operational intelligence</p><h2>Service performance overview</h2><p>${top ? `${escapeHtml(top.name)} currently has the highest workload with ${top.value} complaint${top.value === 1 ? "" : "s"}. The overall resolution rate is ${stats.resolutionRate}%.` : "No complaint data is available yet."}</p></div></section>
-    <section class="stats-grid compact-stats">${statCard("Resolution Rate", `${stats.resolutionRate}%`, "◉", "", "success")}${statCard("High Priority", stats.highPriority, "⚠", "", "danger")}${statCard("Departments", departments.length, "⌂")}${statCard("Citizen Rating", avg === "—" ? avg : `${avg}/5`, "★", "", "warning")}</section>
-    <section class="two-column-grid">${panel("Category distribution", "Most reported civic issue types", renderDonut(categories))}${panel("Priority mix", "Urgency distribution of registered complaints", renderBars(countBy("priority", scopedComplaints), "#7b4bb7"))}</section>
-    ${panel("Department workload", "Number of complaints assigned to each department", renderBars(departments, "#1f6f5f"))}
+    <section class="insight-banner"><div class="section-icon purple">${icon("activity", "", 18)}</div><div><p class="eyebrow">Operational intelligence</p><h2>Service performance overview</h2><p>${top ? `${escapeHtml(top.name)} currently has the highest workload with ${top.value} complaint${top.value === 1 ? "" : "s"}. The overall resolution rate is ${stats.resolutionRate}%.` : "No complaint data is available yet."}</p></div></section>
+    <section class="stats-grid compact-stats">${statCard("Resolution Rate", `${stats.resolutionRate}%`, "check-circle", "", "success")}${statCard("High Priority", stats.highPriority, "alert-triangle", "", "danger")}${statCard("Departments", departments.length, "building")}${statCard("Citizen Rating", avg === "—" ? avg : `${avg}/5`, "activity", "", "warning")}</section>
+    <section class="two-column-grid">${panel("Category distribution", "Most reported civic issue types", renderDonut(categories))}${panel("Priority mix", "Urgency distribution of registered complaints", renderBars(countBy("priority", scopedComplaints), "#6941c6"))}</section>
+    ${panel("Department workload", "Number of complaints assigned to each department", renderBars(departments, "#1664d9"))}
   </div>`;
 }
 
@@ -956,8 +960,8 @@ function roleAccountTable(accounts) {
 }
 
 function renderRoleAccountsPage() {
-  if (!isAdministrator()) return '<section class="data-state-card error-state"><div class="data-state-icon">⚠</div><h2>Administrator access required</h2><p>This workspace is available only to verified CivicResolve administrators.</p></section>';
-  if (roleAccountsError) return `<section class="data-state-card error-state"><div class="data-state-icon">⚠</div><p class="eyebrow">Secure role management</p><h2>Role accounts could not be loaded</h2><p>${escapeHtml(roleAccountsError)}</p><button id="retryRoleAccounts" class="primary-button" type="button">Retry connection</button></section>`;
+  if (!isAdministrator()) return `<section class="data-state-card error-state"><div class="data-state-icon">${icon("alert-triangle", "", 24)}</div><h2>Administrator access required</h2><p>This workspace is available only to verified CivicResolve administrators.</p></section>`;
+  if (roleAccountsError) return `<section class="data-state-card error-state"><div class="data-state-icon">${icon("alert-triangle", "", 24)}</div><p class="eyebrow">Secure role management</p><h2>Role accounts could not be loaded</h2><p>${escapeHtml(roleAccountsError)}</p><button id="retryRoleAccounts" class="primary-button" type="button">Retry connection</button></section>`;
   if (!roleAccountsReady) return `<section class="data-state-card"><div class="data-spinner" aria-hidden="true"></div><p class="eyebrow">Secure role management</p><h2>Loading authorised accounts…</h2><p>CivicResolve is opening the administrator-only user directory.</p></section>`;
 
   const citizenCount = roleAccounts.filter(account => account.role === "citizen").length;
@@ -969,8 +973,8 @@ function renderRoleAccountsPage() {
       <div class="role-onboarding-steps"><span><b>1</b> User registers</span><span><b>2</b> Admin verifies</span><span><b>3</b> Role activates live</span></div>
       <button id="copyOnboarding" class="secondary-button small" type="button">Copy onboarding steps</button>
     </section>
-    <section class="stats-grid compact-stats">${statCard("All Accounts", roleAccounts.length, "♙")}${statCard("Citizens", citizenCount, "◉", "", "info")}${statCard("Officers", officerCount, "▤", "", "warning")}${statCard("Administrators", adminCount, "⚙", "", "success")}</section>
-    ${panel("User role management", "Only administrators can assign or change official access", `<div class="role-filter-row"><div class="search-box">⌕<input id="roleSearch" placeholder="Search name, email or department"></div><select id="roleFilter"><option value="All">All roles</option><option value="citizen">Citizens</option><option value="department-officer">Department officers</option><option value="administrator">Administrators</option></select></div><div id="roleAccountTable">${roleAccountTable(roleAccounts)}</div>`, '<span class="role-badge">Live Firestore</span>')}
+    <section class="stats-grid compact-stats">${statCard("All Accounts", roleAccounts.length, "users")}${statCard("Citizens", citizenCount, "user", "", "info")}${statCard("Officers", officerCount, "building", "", "warning")}${statCard("Administrators", adminCount, "shield-check", "", "success")}</section>
+    ${panel("User role management", "Only administrators can assign or change official access", `<div class="role-filter-row"><div class="search-box">${icon("search", "", 16)}<input id="roleSearch" placeholder="Search name, email or department"></div><select id="roleFilter"><option value="All">All roles</option><option value="citizen">Citizens</option><option value="department-officer">Department officers</option><option value="administrator">Administrators</option></select></div><div id="roleAccountTable">${roleAccountTable(roleAccounts)}</div>`, '<span class="role-badge">Live Firestore</span>')}
   </div>`;
 }
 
@@ -1095,9 +1099,9 @@ function openRoleAccountModal(uid) {
     return;
   }
   document.getElementById("modalRoot").innerHTML = `<div id="modalBackdrop" class="modal-backdrop"><div class="modal role-account-modal" role="dialog" aria-modal="true" aria-labelledby="roleModalTitle">
-    <div class="modal-header"><div><p class="eyebrow">Verified access control</p><h2 id="roleModalTitle">Change role account</h2></div><button id="closeModal" class="icon-button" aria-label="Close">✕</button></div>
+    <div class="modal-header"><div><p class="eyebrow">Verified access control</p><h2 id="roleModalTitle">Change role account</h2></div><button id="closeModal" class="icon-button" aria-label="Close">${icon("x", "", 17)}</button></div>
     <div class="modal-summary"><strong>${escapeHtml(account.displayName)}</strong><span>${escapeHtml(account.email)}</span></div>
-    <div class="role-security-note"><span>✓</span><p><strong>Security check</strong>Verify the person's identity and department before granting official access. The change is recorded in the role audit trail.</p></div>
+    <div class="role-security-note"><span>${icon("shield-check", "", 18)}</span><p><strong>Security check</strong>Verify the person's identity and department before granting official access. The change is recorded in the role audit trail.</p></div>
     <label class="field-label"><span>Account role</span><select id="accountRole"><option value="citizen" ${account.role === "citizen" ? "selected" : ""}>Citizen</option><option value="department-officer" ${account.role === "department-officer" ? "selected" : ""}>Department Officer</option><option value="administrator" ${account.role === "administrator" ? "selected" : ""}>Administrator</option></select></label>
     <label class="field-label"><span>Assigned department</span><select id="accountDepartment">${DEPARTMENTS.map(department => `<option ${department === account.department ? "selected" : ""}>${escapeHtml(department)}</option>`).join("")}</select><small id="departmentHelp">Required for department officers.</small></label>
     <div class="button-row end"><button id="cancelModal" class="secondary-button">Cancel</button><button id="saveRoleAccount" class="primary-button">Save Role</button></div>
@@ -1311,7 +1315,7 @@ function openManageModal(id) {
   selectedComplaintId = id;
   const adminOnly = !isAdministrator() ? "disabled" : "";
   document.getElementById("modalRoot").innerHTML = `<div id="modalBackdrop" class="modal-backdrop"><div class="modal">
-    <div class="modal-header"><div><p class="eyebrow">${item.id}</p><h2>Update complaint</h2></div><button id="closeModal" class="icon-button">✕</button></div>
+    <div class="modal-header"><div><p class="eyebrow">${item.id}</p><h2>Update complaint</h2></div><button id="closeModal" class="icon-button" aria-label="Close">${icon("x", "", 17)}</button></div>
     <div class="modal-summary"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.location)}</span></div>
     ${renderEvidenceSection(item, false)}
     <label class="field-label"><span>Status</span><select id="modalStatus">${STATUS_FLOW.map(status => `<option ${status === item.status ? "selected" : ""}>${status}</option>`).join("")}</select></label>
