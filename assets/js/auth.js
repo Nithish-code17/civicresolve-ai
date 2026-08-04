@@ -60,6 +60,10 @@
     profileUnsubscribe: null
   };
 
+  function icon(name, size = 18) {
+    return window.CivicIcons?.render(name, "", size) || "";
+  }
+
   let resolveReady;
   const readyPromise = new Promise(resolve => { resolveReady = resolve; });
 
@@ -224,7 +228,7 @@
   }
 
   function authBrand() {
-    return `<div class="auth-brand"><div class="auth-logo">✦</div><div><strong>CivicResolve</strong><span>AI Grievance Portal</span></div></div>`;
+    return `<div class="auth-brand"><div class="auth-logo">${icon("shield-check", 22)}</div><div><strong>CivicResolve</strong><span>Public Grievance System</span></div></div>`;
   }
 
   function renderAuthScreen(view = "signin") {
@@ -272,7 +276,7 @@
   }
 
   function renderDemoAccess() {
-    return `<section class="demo-access"><div><strong>Hackathon demo access</strong><span>Firebase keys are not configured yet. Choose a role to test its protected workspace.</span></div><div class="demo-role-grid"><button data-demo-role="citizen"><span>◉</span>Citizen</button><button data-demo-role="department-officer"><span>▤</span>Officer</button><button data-demo-role="administrator"><span>⚙</span>Admin</button></div></section>`;
+    return `<section class="demo-access"><div><strong>Hackathon demo access</strong><span>Firebase keys are not configured yet. Choose a role to test its protected workspace.</span></div><div class="demo-role-grid"><button data-demo-role="citizen"><span>${icon("user", 17)}</span>Citizen</button><button data-demo-role="department-officer"><span>${icon("building", 17)}</span>Officer</button><button data-demo-role="administrator"><span>${icon("shield-check", 17)}</span>Admin</button></div></section>`;
   }
 
   function attachAuthEvents(view) {
