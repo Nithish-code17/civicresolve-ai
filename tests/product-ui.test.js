@@ -16,6 +16,11 @@ assert.ok(productCssIndex > html.indexOf("assets/css/role-accounts.css"), "The p
 assert.ok(html.indexOf("assets/js/icons.js") < html.indexOf("assets/js/auth.js"), "Icons must be available before UI rendering starts.");
 assert.match(html, /assets\/favicon\.svg/);
 assert.match(css, /--product-navy:/);
+assert.match(css, /--product-text-caption:\s*11px/);
+assert.match(css, /--product-text-base:\s*14px/);
+assert.match(css, /\.v2-shell \.nav-link[\s\S]*?font-size:\s*var\(--product-text-base\)/);
+assert.match(css, /\.v2-shell \.data-table td[\s\S]*?font-size:\s*var\(--product-text-label\)/);
+assert.match(css, /\.v2-shell \.field-label > span,[\s\S]*?font-size:\s*var\(--product-text-label\)/);
 assert.match(css, /\.product-hero-status/);
 assert.match(css, /prefers-reduced-motion/);
 assert.match(css, /@media \(max-width: 720px\)/);
