@@ -85,6 +85,35 @@ function optionalText(value, maximum) {
   return String(value || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, maximum);
 }
 
+function safeLocationData(value, address) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new ComplaintApiError(400, "complaint/invalid-location", "Select a valid complaint location on the map.");
+  }
+  const latitude = Number(value.latitude);
+  const longitude = Number(value.longitude);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90
+    || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    throw new ComplaintApiError(400, "complaint/invalid-location", "The selected map coordinates are invalid.");
+  }
+  const source = ["map-pin", "device", "address-search"].includes(value.source) ? value.source : "map-pin";
+  let accuracyMeters = null;
+  if (value.accuracyMeters !== null && value.accuracyMeters !== undefined && value.accuracyMeters !== "") {
+    accuracyMeters = Number(value.accuracyMeters);
+    if (!Number.isFinite(accuracyMeters) || accuracyMeters < 0 || accuracyMeters > 100000) {
+      throw new ComplaintApiError(400, "complaint/invalid-location", "The selected location accuracy is invalid.");
+    }
+  }
+  return {
+    latitude: Number(latitude.toFixed(7)),
+    longitude: Number(longitude.toFixed(7)),
+    address,
+    ward: optionalText(value.ward, 120),
+    source,
+    accuracyMeters
+  };
+}
+
 function requireEnvironment(environment) {
   const config = {
     projectId: String(environment.FIREBASE_PROJECT_ID || DEFAULT_FIREBASE_PROJECT_ID).trim(),
@@ -171,6 +200,7 @@ function safeComplaintInput(body) {
     description: requiredText(body.description, 15, 5000, "Description"),
     location: requiredText(body.location, 3, 500, "Location")
   };
+  const locationData = safeLocationData(body.locationData, input.location);
   const fallback = classificationRules.analyse(input);
   const category = classificationRules.validCategory(body.category) ? body.category : fallback.category;
   const route = classificationRules.ruleForCategory(category);
@@ -183,6 +213,7 @@ function safeComplaintInput(body) {
     department: route.department,
     priority,
     duplicateId: optionalText(body.duplicateId, 80),
+    locationData,
     classification: safeClassification(body.classification, input, route.category, priority, requestedPriority)
   };
 }
@@ -207,6 +238,7 @@ function complaintRecord(input, profile, uid, now) {
     title: input.title,
     description: input.description,
     location: input.location,
+    ...(input.locationData ? { locationData: input.locationData } : {}),
     category: input.category,
     department: input.department,
     priority: input.priority,
@@ -291,5 +323,6 @@ module.exports = {
   ComplaintApiError,
   complaintRecord,
   createComplaintHandler,
+  safeLocationData,
   safeComplaintInput
 };

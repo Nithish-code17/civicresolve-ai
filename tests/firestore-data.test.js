@@ -48,6 +48,7 @@ function createHarness(userProfile, snapshotData = []) {
   };
   const window = {
     CivicSlaPolicy: slaPolicy,
+    CivicMaps: { normaliseLocation: value => value && typeof value === "object" ? { ...value } : null },
     CivicAuth: {
       getProfile: () => userProfile,
       getUser: () => ({ getIdToken: async () => "firebase-id-token" }),
@@ -88,6 +89,7 @@ function createHarness(userProfile, snapshotData = []) {
             title: input.title,
             description: input.description,
             location: input.location,
+            locationData: input.locationData,
             category: input.category,
             department: input.department,
             priority: input.priority,
@@ -171,6 +173,7 @@ async function run() {
     title: "Streetlight is not working",
     description: "The streetlight near the school has not worked for two nights.",
     location: "Ward 12, Coimbatore",
+    locationData: { latitude: 11.0412, longitude: 76.9558, address: "Ward 12, Coimbatore", ward: "Ward 12", source: "map-pin", accuracyMeters: null },
     category: "Electricity & Streetlights",
     department: "Electricity Department",
     priority: "High",
@@ -194,9 +197,12 @@ async function run() {
   assert.equal(createPayload.category, "Electricity & Streetlights");
   assert.equal(createPayload.department, "Electricity Department");
   assert.equal(createPayload.priority, "High");
+  assert.equal(createPayload.locationData.latitude, 11.0412);
+  assert.equal(createPayload.locationData.address, createPayload.location);
   assert.equal(createPayload.classification.source, "gemini");
   assert.equal(createPayload.classification.confidence, 91);
   assert.equal(created.createdByUid, citizen.uid);
+  assert.equal(created.locationData.ward, "Ward 12");
   assert.equal(created.sla.policyVersion, "civicresolve-sla-v1");
   assert.equal(created.sla.targetDays, 1);
 

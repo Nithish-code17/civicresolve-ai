@@ -11,6 +11,7 @@
       id: "GRV-2026-001", citizenName: "Arun Kumar", email: "arun@example.com", phone: "9876543210",
       title: "Large pothole near bus stand", description: "A large pothole is causing accidents near the main bus stand.",
       location: "Gandhipuram Bus Stand, Coimbatore", category: "Roads & Potholes", department: "Public Works Department",
+      locationData: { latitude: 11.0184, longitude: 76.9674, address: "Gandhipuram Bus Stand, Coimbatore", ward: "Gandhipuram", source: "map-pin", accuracyMeters: null },
       priority: "High", status: "In Progress", createdAt: "2026-07-30", expectedResolutionDate: "2026-08-04",
       resolutionNote: "Repair team has inspected the location and work has started.", rating: null, feedback: ""
     },
@@ -18,6 +19,7 @@
       id: "GRV-2026-002", citizenName: "Meena S", email: "meena@example.com", phone: "9876501234",
       title: "Garbage not collected", description: "Garbage has not been collected for three days and there is a bad smell.",
       location: "RS Puram, Coimbatore", category: "Waste Management", department: "Municipal Waste Department",
+      locationData: { latitude: 11.0083, longitude: 76.9504, address: "RS Puram, Coimbatore", ward: "RS Puram", source: "map-pin", accuracyMeters: null },
       priority: "Medium", status: "Assigned", createdAt: "2026-07-31", expectedResolutionDate: "2026-08-02",
       resolutionNote: "Assigned to Ward 23 sanitation team.", rating: null, feedback: ""
     },
@@ -25,6 +27,7 @@
       id: "GRV-2026-003", citizenName: "Rahul P", email: "rahul@example.com", phone: "9876511111",
       title: "Streetlight not working", description: "The streetlight near the school is not working and the road is dark at night.",
       location: "Saibaba Colony, Coimbatore", category: "Electricity & Streetlights", department: "Electricity Department",
+      locationData: { latitude: 11.0265, longitude: 76.9414, address: "Saibaba Colony, Coimbatore", ward: "Saibaba Colony", source: "map-pin", accuracyMeters: null },
       priority: "High", status: "Resolved", createdAt: "2026-07-28", expectedResolutionDate: "2026-07-30",
       resolutionNote: "Faulty light unit replaced and tested successfully.", rating: 5, feedback: "Resolved quickly. Thank you."
     },
@@ -32,6 +35,7 @@
       id: "GRV-2026-004", citizenName: "Divya R", email: "divya@example.com", phone: "9876522222",
       title: "Water pipeline leakage", description: "A water pipe is leaking continuously near the market.",
       location: "Town Hall, Coimbatore", category: "Water Supply", department: "Water Supply Department",
+      locationData: { latitude: 10.9948, longitude: 76.9617, address: "Town Hall, Coimbatore", ward: "Town Hall", source: "map-pin", accuracyMeters: null },
       priority: "Medium", status: "Submitted", createdAt: "2026-08-01", expectedResolutionDate: "2026-08-03",
       resolutionNote: "", rating: null, feedback: ""
     }
@@ -97,6 +101,7 @@
     return {
       ...data,
       id: data.id || documentId,
+      locationData: window.CivicMaps?.normaliseLocation(data.locationData) || null,
       createdAt: dateValue(data.createdAt),
       updatedAt: dateValue(data.updatedAt, true),
       statusHistory: history,
@@ -288,6 +293,7 @@
       title: String(input.title || "").trim(),
       description: String(input.description || "").trim(),
       location: String(input.location || "").trim(),
+      locationData: window.CivicMaps?.normaliseLocation(input.locationData),
       category: String(input.category || "General Civic Issue"),
       department: String(input.department || "General Administration"),
       priority,

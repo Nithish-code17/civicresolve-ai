@@ -12,6 +12,7 @@ The project remains build-free and uses browser-native JavaScript modules for Fi
 - `assets/css/styles.css` contains the shared design system and responsive styles.
 - `assets/js/auth.js` owns Firebase sessions, user profiles and role permissions.
 - `assets/js/firestore-data.js` owns role-scoped complaint queries, writes, migration and real-time listeners.
+- `assets/js/maps.js` owns map selection, user-triggered geocoding, role-scoped operational markers and nearby-pin grouping.
 - `server/complaint-creator.js` verifies citizen access, validates routing and creates complaints with server-stamped SLA records.
 - `api/create-complaint.js` exposes secure complaint creation as a same-origin Vercel Function.
 - `assets/js/evidence-upload.js` validates citizen files and calls the same-origin evidence APIs for upload, progress, secure opening and cleanup.
@@ -167,6 +168,20 @@ Complaint accountability uses a shared, versioned SLA policy:
 - The scheduler authenticates with `CRON_SECRET` and a server-only Firebase service account; no privileged credential reaches browser code.
 
 The three values documented in `SLA_SETUP.md` are active. Firebase remains on Spark and Vercel uses its once-daily Hobby schedule.
+
+### Stage 9 — complete
+
+Complaint location intelligence adds a backward-compatible structured map record:
+
+- Citizens can explicitly search an Indian address, request device location or click the map to select a public issue point.
+- New map reports submit latitude, longitude, the selected address, detected area/ward, source and optional device accuracy.
+- The secure creation Function validates coordinate bounds, normalises the record and keeps the mapped address consistent with the human-readable location.
+- Firestore permits the optional `locationData` map for legacy compatibility, requires it on direct citizen creates and validates every nested field.
+- Officers and administrators see only role-authorised complaints on the operational map.
+- The map and complaint table share search, status, priority, SLA, category and department filters.
+- Nearby coordinates are grouped into a single marker to expose small civic-problem hotspots without bulk-geocoding older records.
+- Legacy complaints remain readable and editable; the interface reports how many lack coordinates rather than sending them to an external geocoder.
+- Leaflet 1.9.4 is vendored in the repository. OpenStreetMap tiles include visible attribution, and address lookup is explicit rather than autocomplete.
 
 ## Development principles
 

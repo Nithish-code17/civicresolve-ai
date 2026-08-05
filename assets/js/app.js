@@ -353,6 +353,7 @@ function renderApp() {
     return;
   }
   if (!window.CivicAuth.canAccess(activePage)) activePage = "dashboard";
+  window.CivicMaps?.destroyAll();
   document.getElementById("app").innerHTML = appShell();
   document.getElementById("pageContent").innerHTML = renderPage();
   attachShellEvents();
@@ -588,13 +589,39 @@ function renderSubmitPage() {
       ${field("Email address", "email", "name@example.com", true, "email", `value="${escapeHtml(profile?.email || "")}" readonly`)}
       ${field("Complaint title", "title", "Example: Streetlight not working", true)}
       <label class="field-label"><span>Detailed description</span><textarea id="description" name="description" placeholder="Describe the problem, how long it has existed and whether it creates danger." required minlength="15" rows="6"></textarea></label>
-      ${field("Location / landmark", "location", "Example: Near Gandhipuram Bus Stand", true)}
+      ${renderLocationPicker()}
       ${renderInitialEvidenceUploader()}
       <div class="form-note">${icon("shield-check", "", 16)} This complaint will be securely linked to your signed-in citizen account.</div>
       <button class="primary-button full-width" type="submit">${icon("sparkles", "", 16)} Analyse and submit complaint</button>
     </form>
     <aside id="analysisCard" class="analysis-card">${renderEmptyAnalysis()}</aside>
   </div>`;
+}
+
+function renderLocationPicker() {
+  return `<section class="location-picker" aria-labelledby="locationPickerTitle">
+    <div class="location-picker-heading"><div><strong id="locationPickerTitle">Exact complaint location</strong><small>Search an Indian address, detect your position, or click the map to place the pin.</small></div><span class="required-field-badge">Required</span></div>
+    <div class="location-search-row">
+      <form id="locationSearchForm" class="location-search-form" role="search">
+        <div class="search-box">${icon("search", "", 16)}<input id="locationSearchInput" type="search" autocomplete="street-address" placeholder="Search landmark, street, area or postcode" aria-label="Search for complaint location"></div>
+        <button class="secondary-button" type="submit">Search map</button>
+      </form>
+      <button id="useCurrentLocation" class="secondary-button location-device-button" type="button">${icon("crosshair", "", 16)} Use current location</button>
+    </div>
+    <div id="locationSearchResults" class="location-search-results" hidden></div>
+    <div class="complaint-map-shell">
+      <div id="complaintLocationMap" class="complaint-location-map" aria-label="Interactive map for selecting complaint location"></div>
+      <div class="map-pin-guidance">${icon("map-pin", "", 15)} Click the map or drag the pin</div>
+    </div>
+    <label class="field-label selected-address-field"><span>Selected address</span><input id="location" name="location" placeholder="Choose a point on the map" required readonly></label>
+    <input id="locationLatitude" name="locationLatitude" type="hidden">
+    <input id="locationLongitude" name="locationLongitude" type="hidden">
+    <input id="locationWard" name="locationWard" type="hidden">
+    <input id="locationSource" name="locationSource" type="hidden">
+    <input id="locationAccuracy" name="locationAccuracy" type="hidden">
+    <div class="location-selection-footer"><div><p id="locationMapStatus" class="location-map-status" aria-live="polite"></p><small id="selectedWard" hidden></small></div><button id="clearMapLocation" class="text-button" type="button" hidden>Clear location</button></div>
+    <p class="map-privacy-note">${icon("shield-check", "", 14)} Address search uses OpenStreetMap. Only search when you are ready to identify the public issue location.</p>
+  </section>`;
 }
 
 function field(label, name, placeholder, required = false, type = "text", extra = "") {
@@ -724,7 +751,7 @@ function renderSubmissionSuccess(item) {
     ? `Gemini AI · ${item.classification.confidence}% confidence`
     : "Smart rules fallback";
   return `<div class="success-page"><div class="success-icon">${icon("check-circle", "", 28)}</div><p class="eyebrow">Complaint registered successfully</p><h2>${item.id}</h2><p>Save this grievance ID. It is required to track the complaint.</p>
-    <div class="result-card">${resultRow("Classification", classificationLabel)}${resultRow("Category", item.category)}${resultRow("Department", item.department)}${resultRow("Priority", item.priority)}${resultRow("Evidence", `${item.evidence?.length || 0} file${item.evidence?.length === 1 ? "" : "s"}`)}${resultRow("SLA deadline", formatDateTime(slaAssessment(item).deadlineAt || item.expectedResolutionDate))}</div>
+    <div class="result-card">${resultRow("Classification", classificationLabel)}${resultRow("Category", item.category)}${resultRow("Department", item.department)}${resultRow("Priority", item.priority)}${resultRow("Mapped location", item.locationData ? (item.locationData.ward || "Exact pin saved") : "Address saved")}${resultRow("Evidence", `${item.evidence?.length || 0} file${item.evidence?.length === 1 ? "" : "s"}`)}${resultRow("SLA deadline", formatDateTime(slaAssessment(item).deadlineAt || item.expectedResolutionDate))}</div>
     ${item.duplicateId ? `<div class="alert warning">${icon("alert-triangle", "", 17)} <span>A similar unresolved complaint may already exist: <strong>${item.duplicateId}</strong>.</span></div>` : ""}
     ${evidenceUploadWarning ? `<div class="alert warning evidence-warning">${icon("alert-triangle", "", 17)} <span><strong>Complaint saved without evidence.</strong> ${escapeHtml(evidenceUploadWarning)} You can add the files later from Track Complaint while the case is awaiting review.</span></div>` : ""}
     <div class="button-row center"><button class="primary-button" data-success-go="track">${icon("search", "", 16)} Track complaint</button><button class="secondary-button" id="submitAnother">Submit another</button></div></div>`;
@@ -865,10 +892,17 @@ function renderAdminPage() {
   const managedComplaints = visibleComplaints();
   const stats = getStats(managedComplaints);
   const subtitle = isOfficer() ? `Showing complaints assigned to ${authProfile()?.department || "your department"}` : "Search, assign and update citizen grievances";
+  const categories = [...new Set(managedComplaints.map(item => item.category).filter(Boolean))].sort();
+  const departments = [...new Set(managedComplaints.map(item => item.department).filter(Boolean))].sort();
   return `<div class="page-stack">
     <section class="stats-grid compact-stats">${statCard("Total", stats.total, "clipboard-list")}${statCard("High Priority", stats.highPriority, "alert-triangle", "", "danger")}${statCard("Active Work", stats.inProgress, "activity", "", "info")}${statCard("Resolved", stats.resolved, "check-circle", "", "success")}</section>
     ${renderSlaAlertBanner(managedComplaints)}
-    ${panel("Complaint management", subtitle, `<div class="filter-row sla-filter-row"><div class="search-box">${icon("search", "", 16)}<input id="adminSearch" placeholder="Search ID, title, citizen or location"></div><select id="statusFilter"><option>All</option>${STATUS_FLOW.map(s => `<option>${s}</option>`).join("")}</select><select id="priorityFilter"><option>All</option><option>High</option><option>Medium</option><option>Low</option></select><select id="slaFilter"><option value="All">All SLA states</option><option value="overdue">Overdue</option><option value="due-soon">Due soon</option><option value="on-track">On track</option><option value="resolved">Resolved</option></select></div><div id="adminTable">${complaintTable(managedComplaints)}</div>`, window.CivicComplaints.isDemoMode() && isAdministrator() ? '<button id="resetDemo" class="secondary-button small">Reset demo data</button>' : '<span class="role-badge">Live Firestore</span>')}
+    ${panel("Complaint management", subtitle, `<div class="filter-row map-filter-row"><div class="search-box">${icon("search", "", 16)}<input id="adminSearch" placeholder="Search ID, title, citizen or location"></div><select id="statusFilter" aria-label="Filter by complaint status"><option>All</option>${STATUS_FLOW.map(s => `<option>${s}</option>`).join("")}</select><select id="priorityFilter" aria-label="Filter by priority"><option>All</option><option>High</option><option>Medium</option><option>Low</option></select><select id="slaFilter" aria-label="Filter by SLA state"><option value="All">All SLA states</option><option value="overdue">Overdue</option><option value="due-soon">Due soon</option><option value="on-track">On track</option><option value="resolved">Resolved</option></select><select id="categoryFilter" aria-label="Filter by complaint category"><option value="All">All categories</option>${categories.map(category => `<option>${escapeHtml(category)}</option>`).join("")}</select><select id="departmentFilter" aria-label="Filter by assigned department"><option value="All">All departments</option>${departments.map(department => `<option>${escapeHtml(department)}</option>`).join("")}</select></div>
+      <section class="operations-map-section" aria-labelledby="operationsMapTitle"><div class="operations-map-heading"><div><h4 id="operationsMapTitle">Complaint location map</h4><p>View exact issue pins and nearby complaint groups within your authorised scope.</p></div><label><span>Marker colour</span><select id="mapColourMode"><option value="priority">Priority</option><option value="status">Status</option></select></label></div>
+        <div class="operations-map-meta"><span>${icon("map-pin", "", 15)} <strong id="mapVisibleCount">0</strong> mapped</span><span>${icon("alert-circle", "", 15)} <strong id="mapMissingCount">0</strong> legacy records without pins</span><span class="map-legend"><i class="map-dot high"></i> High <i class="map-dot medium"></i> Medium <i class="map-dot low"></i> Low</span></div>
+        <div class="complaint-map-shell"><div id="complaintOperationsMap" class="complaint-operations-map" aria-label="Map of authorised civic complaints"></div><div id="complaintMapEmpty" class="map-empty-overlay" hidden>${icon("map-pin", "", 22)}<strong>No mapped complaints in this view</strong><span>Change the filters or wait for a new map-based report.</span></div></div>
+      </section>
+      <div class="complaint-table-heading"><div><h4>Complaint records</h4><p>The table and map use the same filters.</p></div><span id="filteredComplaintCount">${managedComplaints.length} record${managedComplaints.length === 1 ? "" : "s"}</span></div><div id="adminTable">${complaintTable(managedComplaints)}</div>`, window.CivicComplaints.isDemoMode() && isAdministrator() ? '<button id="resetDemo" class="secondary-button small">Reset demo data</button>' : '<span class="role-badge">Live Firestore</span>')}
   </div>`;
 }
 
@@ -1011,6 +1045,7 @@ function attachPageEvents() {
     title.addEventListener("input", updateAnalysis);
     description.addEventListener("input", updateAnalysis);
     location.addEventListener("input", updateAnalysis);
+    window.CivicMaps?.initComplaintPicker({ onChange: updateAnalysis });
     attachInitialEvidenceEvents();
     document.getElementById("complaintForm").addEventListener("submit", submitComplaint);
   }
@@ -1156,6 +1191,13 @@ async function submitComplaint(event) {
     return;
   }
   const data = Object.fromEntries(new FormData(event.currentTarget));
+  const locationData = window.CivicMaps?.readFormLocation();
+  if (!locationData) {
+    showToast("Select the exact complaint location on the map before submitting.", "error");
+    document.getElementById("complaintLocationMap")?.focus?.();
+    return;
+  }
+  data.locationData = locationData;
   const profile = authProfile();
   data.citizenName = profile?.displayName || data.citizenName;
   data.email = profile?.email || data.email;
@@ -1258,19 +1300,34 @@ function attachAdminEvents() {
   const status = document.getElementById("statusFilter");
   const priority = document.getElementById("priorityFilter");
   const sla = document.getElementById("slaFilter");
+  const category = document.getElementById("categoryFilter");
+  const department = document.getElementById("departmentFilter");
+  const colourMode = document.getElementById("mapColourMode");
   const refresh = () => {
     const text = search.value.toLowerCase();
     const filtered = visibleComplaints().filter(item => `${item.id} ${item.title} ${item.citizenName} ${item.location}`.toLowerCase().includes(text)
       && (status.value === "All" || item.status === status.value)
       && (priority.value === "All" || item.priority === priority.value)
-      && (!sla || sla.value === "All" || slaAssessment(item).state === sla.value));
+      && (!sla || sla.value === "All" || slaAssessment(item).state === sla.value)
+      && (!category || category.value === "All" || item.category === category.value)
+      && (!department || department.value === "All" || item.department === department.value));
     document.getElementById("adminTable").innerHTML = complaintTable(filtered);
+    const count = document.getElementById("filteredComplaintCount");
+    if (count) count.textContent = `${filtered.length} record${filtered.length === 1 ? "" : "s"}`;
+    window.CivicMaps?.updateOperationsMap(filtered, { colourMode: colourMode?.value || "priority" });
     attachTableEvents();
   };
+  window.CivicMaps?.initOperationsMap(visibleComplaints(), {
+    colourMode: colourMode?.value || "priority",
+    onSelect: id => openManageModal(id)
+  });
   search.addEventListener("input", refresh);
   status.addEventListener("change", refresh);
   priority.addEventListener("change", refresh);
   sla?.addEventListener("change", refresh);
+  category?.addEventListener("change", refresh);
+  department?.addEventListener("change", refresh);
+  colourMode?.addEventListener("change", refresh);
   document.getElementById("resetDemo")?.addEventListener("click", () => {
     if (!isAdministrator()) return;
     if (!confirm("Reset all data to the original demo complaints?")) return;
