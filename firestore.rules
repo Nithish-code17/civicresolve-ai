@@ -106,7 +106,7 @@ service cloud.firestore {
         'duplicateId', 'createdByUid', 'createdByEmail', 'createdAt',
         'updatedAt', 'statusHistory'
       ];
-      let permitted = required.concat(['evidence', 'classification', 'sla']);
+      let permitted = required.concat(['evidence', 'classification', 'sla', 'locationData']);
       return data.keys().hasAll(required) && data.keys().hasOnly(permitted);
     }
 
@@ -202,6 +202,38 @@ service cloud.firestore {
         && item.reasoning.size() <= 300
         && item.reviewRequired is bool
         && item.safetyOverride is bool
+      );
+    }
+
+    function locationDataIsValid(data) {
+      let present = 'locationData' in data;
+      let item = present ? data.locationData : {};
+      return !present || (
+        item is map
+        && item.keys().hasAll([
+          'latitude', 'longitude', 'address', 'ward', 'source', 'accuracyMeters'
+        ])
+        && item.keys().hasOnly([
+          'latitude', 'longitude', 'address', 'ward', 'source', 'accuracyMeters'
+        ])
+        && item.latitude is number
+        && item.latitude >= -90
+        && item.latitude <= 90
+        && item.longitude is number
+        && item.longitude >= -180
+        && item.longitude <= 180
+        && item.address is string
+        && item.address == data.location
+        && item.address.size() >= 3
+        && item.address.size() <= 500
+        && item.ward is string
+        && item.ward.size() <= 120
+        && item.source in ['map-pin', 'device', 'address-search']
+        && (item.accuracyMeters == null || (
+          item.accuracyMeters is number
+          && item.accuracyMeters >= 0
+          && item.accuracyMeters <= 100000
+        ))
       );
     }
 
@@ -320,6 +352,7 @@ service cloud.firestore {
         && data.statusHistory.size() <= 100
         && slaIsValid(data)
         && classificationIsValid(data)
+        && locationDataIsValid(data)
         && evidenceIsValid(data, complaintId);
     }
 
@@ -446,6 +479,7 @@ service cloud.firestore {
         && request.resource.data.feedback == ''
         && request.resource.data.evidence is list
         && request.resource.data.evidence.size() == 0
+        && 'locationData' in request.resource.data
         && 'sla' in request.resource.data
         && newSlaIsValid(request.resource.data)
         && request.resource.data.createdAt == request.time

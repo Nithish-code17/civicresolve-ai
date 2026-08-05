@@ -4,10 +4,11 @@
   "private": true,
   "description": "CivicResolve AI public grievance portal",
   "scripts": {
-    "test": "node tests/classification-rules.test.js && node tests/sla-policy.test.js && node tests/ai-classifier.test.js && node tests/ai-classification-client.test.js && node tests/complaint-creator.test.js && node tests/firestore-data.test.js && node tests/role-accounts.test.js && node tests/evidence-upload.test.js && node tests/evidence-api.test.js && node tests/sla-monitor.test.js && node tests/sla-ui.test.js && node tests/security-rules.test.js && node tests/product-ui.test.js"
+    "test": "node tests/classification-rules.test.js && node tests/sla-policy.test.js && node tests/ai-classifier.test.js && node tests/ai-classification-client.test.js && node tests/complaint-creator.test.js && node tests/firestore-data.test.js && node tests/map-reporting.test.js && node tests/role-accounts.test.js && node tests/evidence-upload.test.js && node tests/evidence-api.test.js && node tests/sla-monitor.test.js && node tests/sla-ui.test.js && node tests/security-rules.test.js && node tests/product-ui.test.js"
   },
   "dependencies": {
-    "cloudinary": "2.10.0"
+    "cloudinary": "2.10.0",
+    "leaflet": "1.9.4"
   },
   "engines": {
     "node": ">=20"

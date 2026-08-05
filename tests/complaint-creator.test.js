@@ -73,6 +73,14 @@ async function run() {
     title: "Exposed electrical wire near school",
     description: "An exposed wire is hanging near the school gate and may cause electric shock.",
     location: "Namakkal bus stand",
+    locationData: {
+      latitude: 11.2196,
+      longitude: 78.1677,
+      address: "Namakkal bus stand",
+      ward: "Namakkal",
+      source: "address-search",
+      accuracyMeters: null
+    },
     category: "Electricity & Streetlights",
     department: "General Administration",
     priority: "Low",
@@ -94,6 +102,14 @@ async function run() {
   assert.equal(response.body.complaint.department, "Electricity Department", "The server controls the department mapping.");
   assert.equal(response.body.complaint.priority, "High", "Deterministic safety rules can raise the submitted priority.");
   assert.equal(response.body.complaint.classification.safetyOverride, true);
+  assert.deepEqual(response.body.complaint.locationData, {
+    latitude: 11.2196,
+    longitude: 78.1677,
+    address: "Namakkal bus stand",
+    ward: "Namakkal",
+    source: "address-search",
+    accuracyMeters: null
+  });
   assert.equal(response.body.complaint.sla.targetDays, 1);
   assert.equal(response.body.complaint.sla.deadlineAt, "2026-08-05T12:00:00.000Z");
   assert.equal(response.body.complaint.sla.lastEvaluatedAt, createdAt.toISOString());
@@ -109,7 +125,19 @@ async function run() {
   assert.equal(stored.createdAt, createdAt.toISOString());
   assert.equal(stored.sla.deadlineAt, "2026-08-05T12:00:00.000Z");
   assert.equal(stored.sla.lastEvaluatedAt, createdAt.toISOString());
+  assert.equal(stored.locationData.latitude, 11.2196);
+  assert.equal(stored.locationData.address, stored.location);
   assert.equal(stored.statusHistory[0].changedByRole, "citizen");
+
+  const invalidLocationResponse = responseHarness();
+  await handler(request({
+    title: "Streetlight is broken",
+    description: "The streetlight has not worked for several days.",
+    location: "Ward 12",
+    locationData: { latitude: 200, longitude: 76.9, address: "Ward 12", source: "map-pin" }
+  }), invalidLocationResponse);
+  assert.equal(invalidLocationResponse.statusCode, 400);
+  assert.equal(invalidLocationResponse.body.error.code, "complaint/invalid-location");
 
   const officerHandler = createComplaintHandler({
     environment,

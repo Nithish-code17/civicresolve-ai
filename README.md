@@ -38,6 +38,10 @@ CivicResolve AI is an intelligent public grievance redressal portal. Citizens ca
 - Priority-aware automatic SLA deadlines with immutable policy snapshots
 - Role-scoped due-soon and overdue alerts, filters, badges and analytics
 - Protected daily Vercel SLA monitor with minimal Firestore writes
+- Exact complaint location selection with address search, device location and draggable map pins
+- Structured latitude, longitude, address, area/ward, accuracy and selection source stored per new report
+- Role-scoped officer/admin complaint map with priority/status colours, shared filters and nearby-pin grouping
+- Backward-compatible handling and counts for legacy complaints without coordinates
 - Responsive mobile and desktop design
 
 ## Version 2 interface enhancements
@@ -83,6 +87,7 @@ civicresolve-ai/
 │       ├── evidence-upload.js
 │       ├── firebase-config.js
 │       ├── firestore-data.js
+│       ├── maps.js
 │       ├── role-accounts.js
 │       ├── sla-policy.js
 │       └── v2-ui.js
@@ -143,4 +148,4 @@ The SLA policy creates a server-timestamped deadline when a complaint is submitt
 
 ## Next phase
 
-The next major enhancement is map-based complaint location selection and officer assignment.
+The next major enhancement is individual officer assignment with workload visibility and resolution proof.
