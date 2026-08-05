@@ -296,14 +296,12 @@
     pickerContext = { map, marker: null, location: null, onChange, searchResults: [] };
     map.on("click", event => selectCoordinates(event.latlng.lat, event.latlng.lng, "map-pin"));
 
-    const searchForm = document.getElementById("locationSearchForm");
     const searchInput = document.getElementById("locationSearchInput");
+    const searchButton = document.getElementById("locationSearchButton");
     const resultsRoot = document.getElementById("locationSearchResults");
-    searchForm?.addEventListener("submit", async event => {
-      event.preventDefault();
-      const button = searchForm.querySelector("button[type='submit']");
-      const original = button?.textContent;
-      if (button) { button.disabled = true; button.textContent = "Searching…"; }
+    const runAddressSearch = async () => {
+      const original = searchButton?.textContent;
+      if (searchButton) { searchButton.disabled = true; searchButton.textContent = "Searching…"; }
       setPickerStatus("Searching mapped addresses…", "loading");
       try {
         const results = await searchAddress(searchInput?.value || "");
@@ -314,8 +312,14 @@
       } catch (error) {
         setPickerStatus(error.message, "warning");
       } finally {
-        if (button) { button.disabled = false; button.textContent = original; }
+        if (searchButton) { searchButton.disabled = false; searchButton.textContent = original; }
       }
+    };
+    searchButton?.addEventListener("click", runAddressSearch);
+    searchInput?.addEventListener("keydown", event => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      runAddressSearch();
     });
     resultsRoot?.addEventListener("click", event => {
       const button = event.target.closest("[data-map-result]");

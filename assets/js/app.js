@@ -602,10 +602,10 @@ function renderLocationPicker() {
   return `<section class="location-picker" aria-labelledby="locationPickerTitle">
     <div class="location-picker-heading"><div><strong id="locationPickerTitle">Exact complaint location</strong><small>Search an Indian address, detect your position, or click the map to place the pin.</small></div><span class="required-field-badge">Required</span></div>
     <div class="location-search-row">
-      <form id="locationSearchForm" class="location-search-form" role="search">
+      <div id="locationSearchForm" class="location-search-form" role="search">
         <div class="search-box">${icon("search", "", 16)}<input id="locationSearchInput" type="search" autocomplete="street-address" placeholder="Search landmark, street, area or postcode" aria-label="Search for complaint location"></div>
-        <button class="secondary-button" type="submit">Search map</button>
-      </form>
+        <button id="locationSearchButton" class="secondary-button" type="button">Search map</button>
+      </div>
       <button id="useCurrentLocation" class="secondary-button location-device-button" type="button">${icon("crosshair", "", 16)} Use current location</button>
     </div>
     <div id="locationSearchResults" class="location-search-results" hidden></div>
