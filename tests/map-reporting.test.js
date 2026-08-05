@@ -68,6 +68,11 @@ assert.ok(fs.statSync(leafletLicense).size > 500, "The Leaflet license must acco
 assert.ok(html.indexOf("assets/vendor/leaflet/leaflet.js") < html.indexOf("assets/js/maps.js"));
 assert.ok(html.indexOf("assets/js/maps.js") < html.indexOf("assets/js/app.js"));
 assert.match(appSource, /id="complaintLocationMap"/);
+assert.match(appSource, /<div id="locationSearchForm"/);
+assert.match(appSource, /id="locationSearchButton"[^>]+type="button"/);
+assert.doesNotMatch(appSource, /<form id="locationSearchForm"/, "The address search must not nest a form inside the complaint form.");
+assert.match(mapsSource, /searchButton\?\.addEventListener\("click", runAddressSearch\)/);
+assert.match(mapsSource, /event\.key !== "Enter"/);
 assert.match(appSource, /readFormLocation/);
 assert.match(appSource, /id="complaintOperationsMap"/);
 assert.match(appSource, /id="categoryFilter"/);
