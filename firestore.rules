@@ -383,6 +383,38 @@ service cloud.firestore {
         && entry.changedByRole == currentUser().data.role;
     }
 
+    function officialProgressUpdateIsValid(complaintId) {
+      return request.resource.data.id == resource.data.id
+        && request.resource.data.id == complaintId
+        && request.resource.data.createdByUid == resource.data.createdByUid
+        && request.resource.data.createdByEmail == resource.data.createdByEmail
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.status in [
+          'Submitted', 'Under Review', 'Assigned', 'In Progress', 'Resolved'
+        ]
+        && request.resource.data.resolutionNote is string
+        && request.resource.data.resolutionNote.size() <= 3000
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.statusHistory is list
+        && request.resource.data.statusHistory.size() <= 100
+        && historyAppendIsValid();
+    }
+
+    function citizenFeedbackUpdateIsValid() {
+      return request.resource.data.createdByUid == resource.data.createdByUid
+        && request.resource.data.createdByEmail == resource.data.createdByEmail
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.feedback is string
+        && request.resource.data.feedback.size() <= 1000
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['rating', 'feedback', 'updatedAt']);
+    }
+
     function citizenEvidenceAppendIsValid(complaintId) {
       let previous = 'evidence' in resource.data ? resource.data.evidence : [];
       let next = request.resource.data.evidence;
@@ -491,35 +523,21 @@ service cloud.firestore {
         || isAssignedDepartment(resource.data);
 
       allow update: if (isAdministrator()
-          && complaintFieldsAreComplete(request.resource.data)
-          && complaintFieldsHaveValidTypes(request.resource.data, complaintId)
-          && request.resource.data.createdByUid == resource.data.createdByUid
-          && request.resource.data.createdByEmail == resource.data.createdByEmail
-          && request.resource.data.id == resource.data.id
-          && request.resource.data.createdAt == resource.data.createdAt
-          && request.resource.data.updatedAt == request.time
+          && officialProgressUpdateIsValid(complaintId)
+          && request.resource.data.priority in ['High', 'Medium', 'Low']
+          && isValidDepartment(request.resource.data.department)
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'resolutionNote', 'priority', 'department', 'updatedAt', 'statusHistory'])
-          && historyAppendIsValid())
+            .hasOnly(['status', 'resolutionNote', 'priority', 'department', 'updatedAt', 'statusHistory']))
         || (isAssignedDepartment(resource.data)
-          && complaintFieldsAreComplete(request.resource.data)
-          && complaintFieldsHaveValidTypes(request.resource.data, complaintId)
+          && officialProgressUpdateIsValid(complaintId)
           && request.resource.data.department == resource.data.department
-          && request.resource.data.createdByUid == resource.data.createdByUid
-          && request.resource.data.updatedAt == request.time
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'resolutionNote', 'updatedAt', 'statusHistory'])
-          && historyAppendIsValid())
+            .hasOnly(['status', 'resolutionNote', 'updatedAt', 'statusHistory']))
         || (ownsComplaint(resource.data)
           && citizenEvidenceAppendIsValid(complaintId))
         || (ownsComplaint(resource.data)
           && resource.data.status == 'Resolved'
-          && complaintFieldsAreComplete(request.resource.data)
-          && complaintFieldsHaveValidTypes(request.resource.data, complaintId)
-          && request.resource.data.createdByUid == resource.data.createdByUid
-          && request.resource.data.updatedAt == request.time
-          && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['rating', 'feedback', 'updatedAt']));
+          && citizenFeedbackUpdateIsValid());
 
       allow delete: if isAdministrator();
     }
