@@ -47,6 +47,24 @@ assert.match(firestore, /item\.address == data\.location/);
 assert.match(firestore, /item\.source in \['map-pin', 'device', 'address-search'\]/);
 assert.match(firestore, /'locationData' in request\.resource\.data/);
 
+const complaintRules = firestore.slice(firestore.indexOf("match /complaints/{complaintId}"));
+const officialUpdateRules = complaintRules.slice(
+  complaintRules.indexOf("allow update:"),
+  complaintRules.indexOf("|| (ownsComplaint(resource.data)")
+);
+assert.match(firestore, /function officialProgressUpdateIsValid\(complaintId\)/);
+assert.match(firestore, /request\.resource\.data\.status in \[/);
+assert.match(firestore, /request\.resource\.data\.resolutionNote\.size\(\) <= 3000/);
+assert.match(firestore, /request\.resource\.data\.statusHistory\.size\(\) <= 100/);
+assert.doesNotMatch(
+  officialUpdateRules,
+  /complaintFieldsHaveValidTypes/,
+  "Official progress updates must not reject unchanged legacy complaint fields."
+);
+assert.match(officialUpdateRules, /officialProgressUpdateIsValid\(complaintId\)/);
+assert.match(officialUpdateRules, /isValidDepartment\(request\.resource\.data\.department\)/);
+assert.match(firestore, /function citizenFeedbackUpdateIsValid\(\)/);
+
 assert.match(evidenceServer, /Authorization: `Bearer \$\{token\}`/);
 assert.match(evidenceServer, /type: "authenticated"/);
 assert.match(evidenceServer, /private_download_url/);
