@@ -1,4 +1,4 @@
-# CivicResolve AI — Version 2
+# CivicResolve AI
 
 CivicResolve AI is an intelligent public grievance redressal portal. Citizens can report and track civic issues, while administrators can classify, prioritise, assign, update and analyse complaints from a single dashboard.
 
